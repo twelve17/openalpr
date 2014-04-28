@@ -34,6 +34,8 @@
 
 using namespace std;
 
+
+
 class Config
 {
 
@@ -43,7 +45,7 @@ class Config
 
     string country;
     
-    bool opencl_enabled;
+    int gpu_mode;
     int multithreading_cores;
     
     float detection_iteration_increase;
@@ -128,5 +130,12 @@ private:
     bool getBoolean(string section, string key, bool defaultValue);
 };
 
+
+enum GPU_MODE
+{
+  GPU_OFF=0,
+  GPU_CUDA=1,
+  GPU_OPENCL=2
+};
 
 #endif // CONFIG_H

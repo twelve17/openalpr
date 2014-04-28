@@ -33,7 +33,7 @@ AlprImpl::AlprImpl(const std::string country, const std::string runtimeDir)
   this->topN = DEFAULT_TOPN;
   this->defaultRegion = "";
   
-  if (config->opencl_enabled)
+  if (config->gpu_mode == GPU_OPENCL)
   {
     
     cv::ocl::PlatformsInfo platinfo;

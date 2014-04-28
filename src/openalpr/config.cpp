@@ -71,7 +71,7 @@ Config::~Config()
 void Config::loadValues(string country)
 {
   
-  opencl_enabled = getBoolean("common", "opencl_enabled", false);
+  gpu_mode = getInt("common", "gpu_mode", GPU_OFF);
   multithreading_cores = getInt("common", "multithreading_cores", 1);
 
   detection_iteration_increase = getFloat("common", "detection_iteration_increase", 1.1);
