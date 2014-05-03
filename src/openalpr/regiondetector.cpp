@@ -29,19 +29,25 @@ RegionDetector::RegionDetector(Config* config)
   if (config->gpu_mode == GPU_OPENCL)
   {
     this->plate_cascade = new ocl::OclCascadeClassifier();
+    this->loaded = this->plate_cascade->load( config->getCascadeRuntimeDir() + config->country + ".xml" );
+  }
+  else if (config->gpu_mode == GPU_CUDA)
+  {
+    this->cuda_cascade = new gpu::CascadeClassifier_GPU();
+    this->loaded = this->cuda_cascade->load( config->getCascadeRuntimeDir() + config->country + ".xml" );
   }
   else
   {
     this->plate_cascade = new CascadeClassifier();
+    this->loaded = this->plate_cascade->load( config->getCascadeRuntimeDir() + config->country + ".xml" );
   }
 
-  if( this->plate_cascade->load( config->getCascadeRuntimeDir() + config->country + ".xml" ) )
+  if( this->loaded )
   {
-    this->loaded = true;
+    
   }
   else
   {
-    this->loaded = false;
     printf("--(!)Error loading classifier\n");
   }
 
@@ -91,6 +97,20 @@ vector<PlateRegion> RegionDetector::doCascade(Mat frame)
   {
     ocl::oclMat openclFrame(frame);
     ((ocl::OclCascadeClassifier*) plate_cascade)->detectMultiScale(openclFrame, plates, config->detection_iteration_increase, 3, 0, minSize, maxSize);
+  }
+  else if (config->gpu_mode == GPU_CUDA)
+  {
+    gpu::GpuMat cudaFrame, plateregions_buffer;
+    Mat plateregions_downloaded;
+    
+    cudaFrame.upload(frame);
+    int numdetected = cuda_cascade->detectMultiScale(cudaFrame, plateregions_buffer, (double) config->detection_iteration_increase, 3, minSize);
+    plateregions_buffer.colRange(0, numdetected).download(plateregions_downloaded);
+    
+    for (int i = 0; i < numdetected; ++i)
+    {
+      plates.push_back(plateregions_downloaded.ptr<cv::Rect>()[i]);
+    }
   }
   else
   {
