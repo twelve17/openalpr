@@ -128,5 +128,11 @@ private:
     bool getBoolean(string section, string key, bool defaultValue);
 };
 
+enum GPU_MODE
+{
+  GPU_OFF=0,
+  GPU_CUDA=1,
+  GPU_OPENCL=2
+};
 
 #endif // OPENALPR_CONFIG_H
