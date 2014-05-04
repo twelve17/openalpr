@@ -18,8 +18,8 @@
 */
 
 
-#ifndef CONFIG_H
-#define CONFIG_H
+#ifndef OPENALPR_CONFIG_H
+#define OPENALPR_CONFIG_H
 
 
 #include "simpleini/simpleini.h"
@@ -33,8 +33,6 @@
 #include <math.h>
 
 using namespace std;
-
-
 
 class Config
 {
@@ -131,11 +129,4 @@ private:
 };
 
 
-enum GPU_MODE
-{
-  GPU_OFF=0,
-  GPU_CUDA=1,
-  GPU_OPENCL=2
-};
-
-#endif // CONFIG_H
+#endif // OPENALPR_CONFIG_H

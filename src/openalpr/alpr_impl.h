@@ -18,8 +18,8 @@
 */
 
 
-#ifndef ALPRIMPL_H
-#define ALPRIMPL_H
+#ifndef OPENALPR_ALPRIMPL_H
+#define OPENALPR_ALPRIMPL_H
 
 #include <list>
 #include <sstream>
@@ -109,22 +109,18 @@ class PlateDispatcher
       return img;
     }
 
-    bool hasPlate()
-    {
-      bool plateAvailable;
-      mMutex.lock();
-      plateAvailable = plateRegions.size() > 0;
-      mMutex.unlock();
-      return plateAvailable;
-    }
-    PlateRegion nextPlate()
+    
+    bool nextPlate(PlateRegion* plateRegion)
     {
       tthread::lock_guard<tthread::mutex> guard(mMutex);
       
-      PlateRegion plateRegion = plateRegions[plateRegions.size() - 1];
+      if (plateRegions.size() == 0)
+	return false;
+      
+      *plateRegion = plateRegions[plateRegions.size() - 1];
       plateRegions.pop_back();
       
-      return plateRegion;
+      return true;
     }
     
     void appendPlate(PlateRegion plate)
@@ -163,4 +159,4 @@ class PlateDispatcher
 
 };
 
-#endif // ALPRIMPL_H
+#endif // OPENALPR_ALPRIMPL_H
