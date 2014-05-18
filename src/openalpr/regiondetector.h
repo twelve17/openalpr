@@ -28,6 +28,7 @@
 #include "opencv2/core/core.hpp"
 #include "opencv2/ml/ml.hpp"
 #include "opencv2/ocl/ocl.hpp"
+#include "opencv2/gpu/gpu.hpp"
 
 #include "utility.h"
 #include "support/timing.h"
@@ -54,7 +55,8 @@ class RegionDetector
 
     float scale_factor;
     CascadeClassifier* plate_cascade;
-
+    gpu::CascadeClassifier_GPU* cuda_cascade;
+  
     bool loaded;
 
     vector<PlateRegion> doCascade(Mat frame);
