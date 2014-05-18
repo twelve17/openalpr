@@ -21,9 +21,18 @@
 
 void plateAnalysisThread(void* arg);
 
-AlprImpl::AlprImpl(const std::string country, const std::string runtimeDir)
+AlprImpl::AlprImpl(const std::string country, const std::string configFile)
 {
-  config = new Config(country, runtimeDir);
+  config = new Config(country, configFile);
+  
+  // Config file or runtime dir not found.  Don't process any further.
+  if (config->loaded == false)
+  {
+    plateDetector = ALPR_NULL_PTR;
+    stateIdentifier = ALPR_NULL_PTR;
+    ocr = ALPR_NULL_PTR;
+    return;
+  }
   plateDetector = new RegionDetector(config);
   stateIdentifier = new StateIdentifier(config);
   ocr = new OCR(config);
@@ -65,11 +74,17 @@ AlprImpl::AlprImpl(const std::string country, const std::string runtimeDir)
 AlprImpl::~AlprImpl()
 {
   delete config;
-  delete plateDetector;
+  if (plateDetector != ALPR_NULL_PTR)
+  	delete plateDetector;
   delete stateIdentifier;
-  delete ocr;
+  if (ocr != ALPR_NULL_PTR)
+  	delete ocr;
 }
 
+bool AlprImpl::isLoaded()
+{
+  return config->loaded;
+}
 
 std::vector<AlprResult> AlprImpl::recognize(cv::Mat img)
 {
@@ -160,14 +175,14 @@ void plateAnalysisThread(void* arg)
   while (true)
   {
     
-    if (dispatcher->hasPlate() == false)
+    PlateRegion plateRegion;
+    if (dispatcher->nextPlate(&plateRegion) == false)
       break;
     
     if (dispatcher->config->debugGeneral)
       cout << "Thread: " << tthread::this_thread::get_id() << " loop " << ++loop_count << endl;
     
-    // Get a single plate region from the queue
-    PlateRegion plateRegion = dispatcher->nextPlate();
+
     
     Mat img = dispatcher->getImageCopy();
 
@@ -211,12 +226,15 @@ void plateAnalysisThread(void* arg)
       }
   
   
+      // Tesseract OCR does not appear to be threadsafe
+      dispatcher->ocrMutex.lock();
       dispatcher->ocr->performOCR(lp.charSegmenter->getThresholds(), lp.charSegmenter->characters);
       
       dispatcher->ocr->postProcessor->analyze(plateResult.region, dispatcher->topN);
 
-      //plateResult.characters = ocr->postProcessor->bestChars;
+
       const vector<PPResult> ppResults = dispatcher->ocr->postProcessor->getResults();
+      dispatcher->ocrMutex.unlock();
       
       int bestPlateIndex = 0;
       

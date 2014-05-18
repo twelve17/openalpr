@@ -17,8 +17,8 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef ALPR_H
-#define ALPR_H
+#ifndef OPENALPR_ALPR_H
+#define OPENALPR_ALPR_H
 
 #include <iostream>
 #include <vector>
@@ -63,7 +63,7 @@ class Alpr
 {
 
   public:
-    Alpr(const std::string country, const std::string runtimeDir = "");
+    Alpr(const std::string country, const std::string configFile = "");
     virtual ~Alpr();
 
     void setDetectRegion(bool detectRegion);
@@ -83,4 +83,4 @@ class Alpr
     AlprImpl* impl;
 };
 
-#endif // APLR_H
+#endif // OPENALPR_APLR_H

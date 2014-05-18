@@ -18,8 +18,8 @@
 */
 
 
-#ifndef CONFIG_H
-#define CONFIG_H
+#ifndef OPENALPR_CONFIG_H
+#define OPENALPR_CONFIG_H
 
 
 #include "simpleini/simpleini.h"
@@ -34,14 +34,13 @@
 
 using namespace std;
 
-
-
 class Config
 {
 
   public:
-    Config(const std::string country, const std::string runtimeDir = "");
+    Config(const std::string country, const std::string config_file = "");
     virtual ~Config();
+    bool loaded;
 
     string country;
     
@@ -138,4 +137,4 @@ enum GPU_MODE
   GPU_OPENCL=2
 };
 
-#endif // CONFIG_H
+#endif // OPENALPR_CONFIG_H

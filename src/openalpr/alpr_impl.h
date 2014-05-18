@@ -18,8 +18,8 @@
 */
 
 
-#ifndef ALPRIMPL_H
-#define ALPRIMPL_H
+#ifndef OPENALPR_ALPRIMPL_H
+#define OPENALPR_ALPRIMPL_H
 
 #include <list>
 #include <sstream>
@@ -38,19 +38,21 @@
 #include "cjson.h"
 
 #include <opencv2/core/core.hpp>
-#include "opencv2/ocl/ocl.hpp"
+#include <opencv2/ocl/ocl.hpp>
    
 
-#include "tinythread/tinythread.h"
+#include "support/tinythread.h"
 
 #define DEFAULT_TOPN 25
 #define DEFAULT_DETECT_REGION false
+
+#define ALPR_NULL_PTR 0
 
 class AlprImpl
 {
 
   public:
-    AlprImpl(const std::string country, const std::string runtimeDir = "");
+    AlprImpl(const std::string country, const std::string configFile = "");
     virtual ~AlprImpl();
 
     std::vector<AlprResult> recognize(cv::Mat img);
@@ -65,6 +67,8 @@ class AlprImpl
     static std::string getVersion();
     
     Config* config;
+    
+    bool isLoaded();
     
   private:
     
@@ -109,22 +113,18 @@ class PlateDispatcher
       return img;
     }
 
-    bool hasPlate()
-    {
-      bool plateAvailable;
-      mMutex.lock();
-      plateAvailable = plateRegions.size() > 0;
-      mMutex.unlock();
-      return plateAvailable;
-    }
-    PlateRegion nextPlate()
+    
+    bool nextPlate(PlateRegion* plateRegion)
     {
       tthread::lock_guard<tthread::mutex> guard(mMutex);
       
-      PlateRegion plateRegion = plateRegions[plateRegions.size() - 1];
+      if (plateRegions.size() == 0)
+	return false;
+      
+      *plateRegion = plateRegions[plateRegions.size() - 1];
       plateRegions.pop_back();
       
-      return plateRegion;
+      return true;
     }
     
     void appendPlate(PlateRegion plate)
@@ -145,7 +145,6 @@ class PlateDispatcher
       return recognitionResults;
     }
     
-
     StateIdentifier* stateIdentifier;
     OCR* ocr;
     Config* config;
@@ -154,13 +153,16 @@ class PlateDispatcher
     bool detectRegion;
     std::string defaultRegion;
     
+    tthread::mutex ocrMutex;
+    
   private:
     
     tthread::mutex mMutex;
+    
     cv::Mat* frame;
     vector<PlateRegion> plateRegions;
     vector<AlprResult> recognitionResults;
 
 };
 
-#endif // ALPRIMPL_H
+#endif // OPENALPR_ALPRIMPL_H
