@@ -19,9 +19,11 @@
 
 #include "config.h"
 
+using namespace std;
 
-Config::Config(const std::string country, const std::string config_file)
+Config::Config(const std::string country, const std::string config_file, const std::string runtime_dir)
 {
+  
   string debug_message = "";
   
   this->loaded = false;
@@ -37,7 +39,6 @@ Config::Config(const std::string country, const std::string config_file)
       // User has supplied a config file.  Use that.
     configFile = config_file;
     debug_message = "Config file location provided via API";
-    
   }
   else if (envConfigFile != NULL)
   {
@@ -68,12 +69,20 @@ Config::Config(const std::string country, const std::string config_file)
     std::cerr << "--(!)             e.g., /etc/openalpr/openalpr.conf" << endl;
     return;
   }
-  
+ 
   ini->LoadFile(configFile.c_str());
-  
+   
   this->country = country;
   
+  
   loadValues(country);
+  
+  if (runtime_dir.compare("") != 0)
+  {
+    // User provided a runtime directory directly into the library.  Use this.
+    this->runtimeBaseDir = runtime_dir;
+  }
+  
   if (DirectoryExists(this->runtimeBaseDir.c_str()) == false)
   {
     std::cerr << "--(!) Runtime directory '" << this->runtimeBaseDir << "' does not exist!" << endl;
@@ -102,14 +111,18 @@ Config::~Config()
 
 void Config::loadValues(string country)
 {
+  
   runtimeBaseDir = getString("common", "runtime_dir", "/usr/share/openalpr/runtime_data");
   
   gpu_mode = getInt("common", "gpu_mode", GPU_OFF);
   multithreading_cores = getInt("common", "multithreading_cores", 1);
 
   detection_iteration_increase = getFloat("common", "detection_iteration_increase", 1.1);
+  detectionStrictness = getInt("common", "detection_strictness", 3);
   maxPlateWidthPercent = getFloat("common", "max_plate_width_percent", 100);
   maxPlateHeightPercent = getFloat("common", "max_plate_height_percent", 100);
+  maxDetectionInputWidth = getInt("common", "max_detection_input_width", 1280);
+  maxDetectionInputHeight = getInt("common", "max_detection_input_height", 768);
 
   maxPlateAngleDegrees = getInt("common", "max_plate_angle_degrees", 15);
   
@@ -187,6 +200,7 @@ void Config::debugOff()
   debugColorFiler = 	false;
   debugOcr = 		false;
   debugPostProcess = 	false;
+  debugPauseOnFrame = 	false;
 }
 
 

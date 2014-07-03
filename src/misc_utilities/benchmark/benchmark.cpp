@@ -28,10 +28,8 @@
 
 #include "alpr_impl.h"
 
-//#include "stage1.h"
-//#include "stage2.h"
-//#include "stateidentifier.h"
-//#include "utility.h"
+#include "endtoendtest.h"
+
 #include "support/filesystem.h"
 
 using namespace std;
@@ -41,6 +39,10 @@ using namespace cv;
 // These will be used to train the OCR
 
 void outputStats(vector<double> datapoints);
+
+
+
+
 
 int main( int argc, const char** argv )
 {
@@ -102,6 +104,8 @@ int main( int argc, const char** argv )
         plateCoords.y = 0;
         plateCoords.width = frame.cols;
         plateCoords.height = frame.rows;
+	
+	PipelineData pipeline_data(frame, plateCoords, config);
 
         char statecode[3];
         statecode[0] = files[i][0];
@@ -109,7 +113,7 @@ int main( int argc, const char** argv )
         statecode[2] = '\0';
         string statecodestr(statecode);
 
-        CharacterRegion charRegion(frame, config);
+        CharacterRegion charRegion(&pipeline_data);
 
         if (abs(charRegion.getTopLine().angle) > 4)
         {
@@ -122,10 +126,11 @@ int main( int argc, const char** argv )
           warpAffine( frame, rotated, rot_mat, frame.size() );
 
           rotated.copyTo(frame);
+	  pipeline_data.crop_gray = frame;
         }
 
-        CharacterSegmenter charSegmenter(frame, charRegion.thresholdsInverted(), config);
-        ocr->performOCR(charSegmenter.getThresholds(), charSegmenter.characters);
+        CharacterSegmenter charSegmenter(&pipeline_data);
+        ocr->performOCR(&pipeline_data);
         ocr->postProcessor->analyze(statecode, 25);
 
         cout << files[i] << "," << statecode << "," << ocr->postProcessor->bestChars << endl;
@@ -209,27 +214,30 @@ int main( int argc, const char** argv )
 
         for (int z = 0; z < regions.size(); z++)
         {
+	  
+	  PipelineData pipeline_data(frame, regions[z].rect, &config);
+	  
           getTime(&startTime);
-          char temp[5];
-          stateIdentifier.recognize(frame, regions[z].rect, temp);
+	  
+          stateIdentifier.recognize(&pipeline_data);
           getTime(&endTime);
           double stateidTime = diffclock(startTime, endTime);
           cout << "\tRegion " << z << ": State ID time: " << stateidTime << "ms." << endl;
           stateIdTimes.push_back(stateidTime);
 
           getTime(&startTime);
-          LicensePlateCandidate lp(frame, regions[z].rect, &config);
+          LicensePlateCandidate lp(&pipeline_data);
           lp.recognize();
           getTime(&endTime);
           double analysisTime = diffclock(startTime, endTime);
           cout << "\tRegion " << z << ": Analysis time: " << analysisTime << "ms." << endl;
 
-          if (lp.confidence > 10)
+          if (pipeline_data.plate_area_confidence > 10)
           {
             lpAnalysisPositiveTimes.push_back(analysisTime);
 
             getTime(&startTime);
-            ocr.performOCR(lp.charSegmenter->getThresholds(), lp.charSegmenter->characters);
+            ocr.performOCR(&pipeline_data);
             getTime(&endTime);
             double ocrTime = diffclock(startTime, endTime);
             cout << "\tRegion " << z << ": OCR time: " << ocrTime << "ms." << endl;
@@ -284,38 +292,9 @@ int main( int argc, const char** argv )
   }
   else if (benchmarkName.compare("endtoend") == 0)
   {
-    Alpr alpr(country);
-    alpr.setDetectRegion(true);
-
-    ofstream outputdatafile;
-
-    outputdatafile.open("results.txt");
-
-    for (int i = 0; i< files.size(); i++)
-    {
-      if (hasEnding(files[i], ".png"))
-      {
-        string fullpath = inDir + "/" + files[i];
-        frame = imread( fullpath.c_str() );
-
-        vector<uchar> buffer;
-        imencode(".bmp", frame, buffer );
-
-        vector<AlprResult> results = alpr.recognize(buffer);
-
-        outputdatafile  << files[i] << ": ";
-        for (int z = 0; z < results.size(); z++)
-        {
-          outputdatafile  << results[z].bestPlate.characters << ", ";
-        }
-        outputdatafile  << endl;
-
-        imshow("Current LP", frame);
-        waitKey(5);
-      }
-    }
-
-    outputdatafile.close();
+    EndToEndTest e2eTest(inDir, outDir);
+    e2eTest.runTest(country, files);
+    
   }
 }
 

@@ -22,7 +22,6 @@
 #include <iostream>
 #include <iterator>
 #include <algorithm>
-#include <signal.h>
 
 #include "opencv2/highgui/highgui.hpp"
 #include "opencv2/imgproc/imgproc.hpp"
@@ -37,10 +36,10 @@ const std::string MAIN_WINDOW_NAME = "ALPR main window";
 
 const bool SAVE_LAST_VIDEO_STILL = false;
 const std::string LAST_VIDEO_STILL_LOCATION = "/tmp/laststill.jpg";
+std::string getJson(Alpr* alpr, std::vector<AlprResult> results);
 
 /** Function Headers */
 bool detectandshow(Alpr* alpr, cv::Mat frame, std::string region, bool writeJson);
-void sighandler(int sig);
 
 bool measureProcessingTime = false;
 
@@ -107,18 +106,6 @@ int main( int argc, const char** argv )
     return 1;
   }
 
-  struct sigaction sigIntHandler;
-  
-  sigIntHandler.sa_handler = sighandler;
-  sigemptyset(&sigIntHandler.sa_mask);
-  sigIntHandler.sa_flags = 0;
-  
-  sigaction(SIGHUP, &sigIntHandler, NULL);
-  sigaction(SIGINT, &sigIntHandler, NULL);
-  sigaction(SIGQUIT, &sigIntHandler, NULL);
-  sigaction(SIGKILL, &sigIntHandler, NULL);
-  sigaction(SIGTERM, &sigIntHandler, NULL);
-  //sigaction(SIGABRT, &sigIntHandler, NULL);
   
   cv::Mat frame;
 
@@ -167,7 +154,7 @@ int main( int argc, const char** argv )
     while (cap.read(frame))
     {
       detectandshow(&alpr, frame, "", outputJson);
-      cv::waitKey(1);
+      usleep(1000);
       framenum++;
     }
   }
@@ -190,14 +177,16 @@ int main( int argc, const char** argv )
         detectandshow( &alpr, latestFrame, "", outputJson);
       }
       
-      cv::waitKey(10);
+      // Sleep 10ms
+      usleep(10000);
     }
     
     videoBuffer.disconnect();
     
     std::cout << "Video processing ended" << std::endl;
   }
-  else if (hasEnding(filename, ".avi") || hasEnding(filename, ".mp4") || hasEnding(filename, ".webm") || hasEnding(filename, ".flv"))
+  else if (hasEndingInsensitive(filename, ".avi") || hasEndingInsensitive(filename, ".mp4") || hasEndingInsensitive(filename, ".webm") || 
+	   hasEndingInsensitive(filename, ".flv") || hasEndingInsensitive(filename, ".mjpg") || hasEndingInsensitive(filename, ".mjpeg"))
   {
     if (fileExists(filename.c_str()))
     {
@@ -217,7 +206,7 @@ int main( int argc, const char** argv )
 
         detectandshow( &alpr, frame, "", outputJson);
         //create a 1ms delay
-        cv::waitKey(1);
+        usleep(1000);
         framenum++;
       }
     }
@@ -226,7 +215,8 @@ int main( int argc, const char** argv )
       std::cerr << "Video file not found: " << filename << std::endl;
     }
   }
-  else if (hasEnding(filename, ".png") || hasEnding(filename, ".jpg") || hasEnding(filename, ".gif"))
+  else if (hasEndingInsensitive(filename, ".png") || hasEndingInsensitive(filename, ".jpg") || 
+	   hasEndingInsensitive(filename, ".jpeg") || hasEndingInsensitive(filename, ".gif"))
   {
     if (fileExists(filename.c_str()))
     {
@@ -247,7 +237,7 @@ int main( int argc, const char** argv )
 
     for (int i = 0; i< files.size(); i++)
     {
-      if (hasEnding(files[i], ".jpg") || hasEnding(files[i], ".png"))
+      if (hasEndingInsensitive(files[i], ".jpg") || hasEndingInsensitive(files[i], ".png"))
       {
         std::string fullpath = filename + "/" + files[i];
         std::cout << fullpath << std::endl;
@@ -273,11 +263,6 @@ int main( int argc, const char** argv )
 }
 
 
-void sighandler(int sig)
-{
-  program_active = false;
-  //std::cout << "Sig handler caught " << sig << std::endl;
-}
 
 
 bool detectandshow( Alpr* alpr, cv::Mat frame, std::string region, bool writeJson)
@@ -290,9 +275,16 @@ bool detectandshow( Alpr* alpr, cv::Mat frame, std::string region, bool writeJso
 
   std::vector<AlprResult> results = alpr->recognize(buffer);
 
+  timespec endTime;
+  getTime(&endTime);
+  double totalProcessingTime = diffclock(startTime, endTime);
+  if (measureProcessingTime)
+    std::cout << "Total Time to process image: " << totalProcessingTime << "ms." << std::endl;
+  
+  
   if (writeJson)
   {
-    std::cout << alpr->toJson(results) << std::endl;
+    std::cout << alpr->toJson(results, totalProcessingTime) << std::endl;
   }
   else
   {
@@ -307,10 +299,8 @@ bool detectandshow( Alpr* alpr, cv::Mat frame, std::string region, bool writeJso
     }
   }
 
-  timespec endTime;
-  getTime(&endTime);
-  if (measureProcessingTime)
-    std::cout << "Total Time to process image: " << diffclock(startTime, endTime) << "ms." << std::endl;
+
 
   return results.size() > 0;
 }
+

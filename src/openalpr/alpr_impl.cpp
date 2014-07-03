@@ -21,9 +21,12 @@
 
 void plateAnalysisThread(void* arg);
 
-AlprImpl::AlprImpl(const std::string country, const std::string configFile)
+using namespace std;
+using namespace cv;
+
+AlprImpl::AlprImpl(const std::string country, const std::string configFile, const std::string runtimeDir)
 {
-  config = new Config(country, configFile);
+  config = new Config(country, configFile, runtimeDir);
   
   // Config file or runtime dir not found.  Don't process any further.
   if (config->loaded == false)
@@ -33,6 +36,7 @@ AlprImpl::AlprImpl(const std::string country, const std::string configFile)
     ocr = ALPR_NULL_PTR;
     return;
   }
+  
   plateDetector = new RegionDetector(config);
   stateIdentifier = new StateIdentifier(config);
   ocr = new OCR(config);
@@ -74,11 +78,15 @@ AlprImpl::AlprImpl(const std::string country, const std::string configFile)
 AlprImpl::~AlprImpl()
 {
   delete config;
+  
   if (plateDetector != ALPR_NULL_PTR)
-  	delete plateDetector;
-  delete stateIdentifier;
+    delete plateDetector;
+  
+  if (stateIdentifier != ALPR_NULL_PTR)
+    delete stateIdentifier;
+  
   if (ocr != ALPR_NULL_PTR)
-  	delete ocr;
+    delete ocr;
 }
 
 bool AlprImpl::isLoaded()
@@ -86,15 +94,30 @@ bool AlprImpl::isLoaded()
   return config->loaded;
 }
 
-std::vector<AlprResult> AlprImpl::recognize(cv::Mat img)
+AlprFullDetails AlprImpl::recognizeFullDetails(cv::Mat img)
 {
   timespec startTime;
   getTime(&startTime);
   
+  AlprFullDetails response;
 
+  if (!img.data)
+  {
+    // Invalid image
+    if (this->config->debugGeneral)
+      std::cerr << "Invalid image" << std::endl;
+    
+    vector<AlprResult> emptyVector;
+    response.results = emptyVector;
+    
+    vector<PlateRegion> emptyVector2;
+    response.plateRegions = emptyVector2;
+    
+    return response;
+  }
 
   // Find all the candidate regions
-  vector<PlateRegion> plateRegions = plateDetector->detect(img);
+  response.plateRegions = plateDetector->detect(img);
 
   // Get the number of threads specified and make sure the value is sane (cannot be greater than CPU cores or less than 1)
   int numThreads = config->multithreading_cores;
@@ -104,7 +127,7 @@ std::vector<AlprResult> AlprImpl::recognize(cv::Mat img)
     numThreads = 1;
 
 
-  PlateDispatcher dispatcher(plateRegions, &img, 
+  PlateDispatcher dispatcher(response.plateRegions, &img, 
 			     config, stateIdentifier, ocr, 
 			     topN, detectRegion, defaultRegion);
     
@@ -133,9 +156,9 @@ std::vector<AlprResult> AlprImpl::recognize(cv::Mat img)
   
   if (config->debugGeneral && config->debugShowImages)
   {
-    for (int i = 0; i < plateRegions.size(); i++)
+    for (int i = 0; i < response.plateRegions.size(); i++)
     {
-      rectangle(img, plateRegions[i].rect, Scalar(0, 0, 255), 2);
+      rectangle(img, response.plateRegions[i].rect, Scalar(0, 0, 255), 2);
     }
     
     for (int i = 0; i < dispatcher.getRecognitionResults().size(); i++)
@@ -151,9 +174,14 @@ std::vector<AlprResult> AlprImpl::recognize(cv::Mat img)
 
     
     displayImage(config, "Main Image", img);
-    cv::waitKey(1);
+    
+    // Sleep 1ms
+    usleep(1000);
     
   }
+  
+  
+  response.results = dispatcher.getRecognitionResults();
   
   if (config->debugPauseOnFrame)
   {
@@ -162,39 +190,43 @@ std::vector<AlprResult> AlprImpl::recognize(cv::Mat img)
     {}
   }
   
-  return dispatcher.getRecognitionResults();
+  return response;
+}
+
+std::vector<AlprResult> AlprImpl::recognize(cv::Mat img)
+{
+  AlprFullDetails fullDetails = recognizeFullDetails(img);
+  return fullDetails.results;
 }
 
 void plateAnalysisThread(void* arg)
 {
   PlateDispatcher* dispatcher = (PlateDispatcher*) arg;
+  
   if (dispatcher->config->debugGeneral)
     cout << "Thread: " << tthread::this_thread::get_id() << " Initialized" << endl;
   
   int loop_count = 0;
   while (true)
   {
-    
     PlateRegion plateRegion;
     if (dispatcher->nextPlate(&plateRegion) == false)
       break;
     
     if (dispatcher->config->debugGeneral)
       cout << "Thread: " << tthread::this_thread::get_id() << " loop " << ++loop_count << endl;
+      
+    PipelineData pipeline_data(dispatcher->getImageCopy(), plateRegion.rect, dispatcher->config);
     
-
-    
-    Mat img = dispatcher->getImageCopy();
-
     timespec platestarttime;
     getTime(&platestarttime);
     
-    LicensePlateCandidate lp(img, plateRegion.rect, dispatcher->config);
+    LicensePlateCandidate lp(&pipeline_data);
     
     lp.recognize();
 
     
-    if (lp.confidence <= 10)
+    if (pipeline_data.plate_area_confidence <= 10)
     {
       // Not a valid plate
       // Check if this plate has any children, if so, send them back up to the dispatcher for processing
@@ -211,28 +243,25 @@ void plateAnalysisThread(void* arg)
       
       for (int pointidx = 0; pointidx < 4; pointidx++)
       {
-	plateResult.plate_points[pointidx].x = (int) lp.plateCorners[pointidx].x;
-	plateResult.plate_points[pointidx].y = (int) lp.plateCorners[pointidx].y;
+	plateResult.plate_points[pointidx].x = (int) pipeline_data.plate_corners[pointidx].x;
+	plateResult.plate_points[pointidx].y = (int) pipeline_data.plate_corners[pointidx].y;
       }
       
       if (dispatcher->detectRegion)
       {
 	char statecode[4];
-	plateResult.regionConfidence = dispatcher->stateIdentifier->recognize(img, plateRegion.rect, statecode);
+	plateResult.regionConfidence = dispatcher->stateIdentifier->recognize(&pipeline_data);
 	if (plateResult.regionConfidence > 0)
 	{
 	  plateResult.region = statecode;
 	}
       }
   
-  
+      
       // Tesseract OCR does not appear to be threadsafe
       dispatcher->ocrMutex.lock();
-      dispatcher->ocr->performOCR(lp.charSegmenter->getThresholds(), lp.charSegmenter->characters);
-      
+      dispatcher->ocr->performOCR(&pipeline_data);
       dispatcher->ocr->postProcessor->analyze(plateResult.region, dispatcher->topN);
-
-
       const vector<PPResult> ppResults = dispatcher->ocr->postProcessor->getResults();
       dispatcher->ocrMutex.unlock();
       
@@ -291,19 +320,28 @@ void plateAnalysisThread(void* arg)
     cout << "Thread: " << tthread::this_thread::get_id() << " Complete" << endl;
 }
 
-string AlprImpl::toJson(const vector< AlprResult > results)
+string AlprImpl::toJson(const vector< AlprResult > results, double processing_time_ms)
 {
-  cJSON *root = cJSON_CreateArray();	
+  cJSON *root, *jsonResults;
+  root = cJSON_CreateObject();
   
+  cJSON_AddNumberToObject(root,"epoch_time",		getEpochTime()  );
+  if (processing_time_ms >= 0)
+  {
+    cJSON_AddNumberToObject(root,"processing_time_ms",		processing_time_ms );
+  }
+  
+  cJSON_AddItemToObject(root, "results", 		jsonResults=cJSON_CreateArray());
   for (int i = 0; i < results.size(); i++)
   {
     cJSON *resultObj = createJsonObj( &results[i] );
-    cJSON_AddItemToArray(root, resultObj);
+    cJSON_AddItemToArray(jsonResults, resultObj);
   }
   
   // Print the JSON object to a string and return
   char *out;
   out=cJSON_PrintUnformatted(root);
+  
   cJSON_Delete(root);
   
   string response(out);

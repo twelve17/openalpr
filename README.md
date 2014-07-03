@@ -100,8 +100,8 @@ OpenALPR compiles and runs on Linux, Mac OSX and Windows.
 
 OpenALPR requires the following additional libraries:
 
-    - Tesseract OCR v3.x (https://code.google.com/p/tesseract-ocr/)
-    - OpenCV v2.4.x (http://opencv.org/)
+    - Tesseract OCR v3.0.3 (https://code.google.com/p/tesseract-ocr/)
+    - OpenCV v2.4.8+ (http://opencv.org/)
 
 After cloning this GitHub repository, you should download and extract Tesseract and OpenCV source code into their own directories.  Compile both libraries.
 
@@ -116,6 +116,18 @@ If all went well, there should be an executable named *alpr* along with *libopen
 Questions
 ---------
 Please post questions or comments to the Google group list: https://groups.google.com/forum/#!forum/openalpr
+
+
+Contributions
+-------------
+Code contributions are not the only way to help out.  Do you have a large library of license plate images?  Do you have time to "tag" plate images in an input image?  If so, please add a note to the forum.
+
+Donations
+---------
+OpenALPR provides bounties for open issues.  Other developers can fix/enhance the library and claim those bounties.  The best way to donate to the project is to add a bounty to one or more of the open issues on BountyShare
+
+[![Bountysource](https://www.bountysource.com/badge/team?team_id=830&style=bounties_received)](https://www.bountysource.com/teams/openalpr/issues?utm_source=OpenALPR&utm_medium=shield&utm_campaign=bounties_received)
+
 
 License
 -------

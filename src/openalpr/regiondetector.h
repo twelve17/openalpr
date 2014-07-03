@@ -36,8 +36,8 @@
 
 struct PlateRegion
 {
-  Rect rect;
-  vector<PlateRegion> children;
+  cv::Rect rect;
+  std::vector<PlateRegion> children;
 };
 
 class RegionDetector
@@ -48,20 +48,20 @@ class RegionDetector
     virtual ~RegionDetector();
 
     bool isLoaded();
-    vector<PlateRegion> detect(Mat frame);
+    std::vector<PlateRegion> detect(cv::Mat frame);
 
   private:
     Config* config;
 
     float scale_factor;
-    CascadeClassifier* plate_cascade;
-    gpu::CascadeClassifier_GPU* cuda_cascade;
-  
+    cv::CascadeClassifier* plate_cascade;
+	cv::gpu::CascadeClassifier_GPU* cuda_cascade;
+
     bool loaded;
 
-    vector<PlateRegion> doCascade(Mat frame);
+    std::vector<PlateRegion> doCascade(cv::Mat frame);
 
-    vector<PlateRegion> aggregateRegions(vector<Rect> regions);
+    std::vector<PlateRegion> aggregateRegions(std::vector<cv::Rect> regions);
 };
 
 #endif // OPENALPR_REGIONDETECTOR_H

@@ -26,19 +26,20 @@
 #include "utility.h"
 #include "config.h"
 
-using namespace cv;
-using namespace std;
 
 #define NO_LINE -1
 
 #define SCORING_MISSING_SEGMENT_PENALTY_VERTICAL	10
-#define SCORING_MISSING_SEGMENT_PENALTY_HORIZONTAL	15
+#define SCORING_MISSING_SEGMENT_PENALTY_HORIZONTAL	1
 
 #define SCORING_BOXINESS_WEIGHT				0.8
 #define SCORING_PLATEHEIGHT_WEIGHT			2.2
-#define SCORING_TOP_BOTTOM_SPACE_VS_CHARHEIGHT_WEIGHT	0.05
+#define SCORING_TOP_BOTTOM_SPACE_VS_CHARHEIGHT_WEIGHT	0.10
 #define SCORING_ANGLE_MATCHES_LPCHARS_WEIGHT		1.1
-#define SCORING_VERTICALDISTANCE_WEIGHT		0.1
+
+#define SCORING_DISTANCE_WEIGHT_VERTICAL		0.04
+
+#define SCORING_LINE_CONFIDENCE_WEIGHT			18.0
 
 #define SCORING_VERTICALDISTANCE_FROMEDGE_WEIGHT	0.05
 
@@ -46,17 +47,17 @@ class PlateCorners
 {
 
   public:
-    PlateCorners(Mat inputImage, PlateLines* plateLines, CharacterRegion* charRegion, Config* config);
+    PlateCorners(cv::Mat inputImage, PlateLines* plateLines, CharacterRegion* charRegion, Config* config);
     virtual ~PlateCorners();
 
-    vector<Point> findPlateCorners();
+    std::vector<cv::Point> findPlateCorners();
 
     float confidence;
 
   private:
 
     Config* config;
-    Mat inputImage;
+    cv::Mat inputImage;
     float charHeight;
     float charAngle;
 

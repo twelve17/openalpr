@@ -19,10 +19,12 @@
 
 #include "regiondetector.h"
 
+using namespace cv;
+using namespace std;
+
 RegionDetector::RegionDetector(Config* config)
 {
   this->config = config;
-  // Don't scale.  Can change this in the future (i.e., maximum resolution preference, or some such).
   this->scale_factor = 1.0f;
 
   // Load either the regular or OpenCL version of the cascade classifier
@@ -68,7 +70,7 @@ vector<PlateRegion> RegionDetector::detect(Mat frame)
 
   Mat frame_gray;
   cvtColor( frame, frame_gray, CV_BGR2GRAY );
-
+  
   vector<PlateRegion> regionsOfInterest = doCascade(frame_gray);
 
   return regionsOfInterest;
@@ -77,7 +79,25 @@ vector<PlateRegion> RegionDetector::detect(Mat frame)
 /** @function detectAndDisplay */
 vector<PlateRegion> RegionDetector::doCascade(Mat frame)
 {
-  //float scale_factor = 1;
+
+  
+  if (frame.cols > config->maxDetectionInputWidth)
+  {
+    // The frame is too wide
+    this->scale_factor = ((float) config->maxDetectionInputWidth) / ((float) frame.cols);
+    
+    if (config->debugGeneral)
+      std::cout << "Input detection image is too wide.  Resizing with scale: " << this->scale_factor << endl;
+  }
+  else if (frame.rows > config->maxDetectionInputHeight)
+  {
+    // The frame is too tall
+    this->scale_factor = ((float) config->maxDetectionInputHeight) / ((float) frame.rows);
+    
+    if (config->debugGeneral)
+      std::cout << "Input detection image is too tall.  Resizing with scale: " << this->scale_factor << endl;
+  }
+  
   int w = frame.size().width;
   int h = frame.size().height;
 
@@ -96,7 +116,7 @@ vector<PlateRegion> RegionDetector::doCascade(Mat frame)
   if (config->gpu_mode == GPU_OPENCL)
   {
     ocl::oclMat openclFrame(frame);
-    ((ocl::OclCascadeClassifier*) plate_cascade)->detectMultiScale(openclFrame, plates, config->detection_iteration_increase, 3, 0, minSize, maxSize);
+    ((ocl::OclCascadeClassifier*) plate_cascade)->detectMultiScale(openclFrame, plates, config->detection_iteration_increase, config->detectionStrictness,, 0, minSize, maxSize);
   }
   else if (config->gpu_mode == GPU_CUDA)
   {
@@ -104,7 +124,7 @@ vector<PlateRegion> RegionDetector::doCascade(Mat frame)
     Mat plateregions_downloaded;
     
     cudaFrame.upload(frame);
-    int numdetected = cuda_cascade->detectMultiScale(cudaFrame, plateregions_buffer, (double) config->detection_iteration_increase, 3, minSize);
+    int numdetected = cuda_cascade->detectMultiScale(cudaFrame, plateregions_buffer, (double) config->detection_iteration_increase, config->detectionStrictness,, minSize);
     plateregions_buffer.colRange(0, numdetected).download(plateregions_downloaded);
     
     for (int i = 0; i < numdetected; ++i)
@@ -116,9 +136,10 @@ vector<PlateRegion> RegionDetector::doCascade(Mat frame)
   {
 
     plate_cascade->detectMultiScale( frame, plates, config->detection_iteration_increase, 3,
-                                     0,
-                                     //0|CV_HAAR_SCALE_IMAGE,
-                                     minSize, maxSize );
+				    0,
+				    //0|CV_HAAR_SCALE_IMAGE,
+				    minSize, maxSize );
+  
   }
 
   if (config->debugTiming)

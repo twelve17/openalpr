@@ -19,9 +19,13 @@
 
 #include "charactersegmenter.h"
 
-CharacterSegmenter::CharacterSegmenter(Mat img, bool invertedColors, Config* config)
+using namespace cv;
+using namespace std;
+
+CharacterSegmenter::CharacterSegmenter(PipelineData* pipeline_data)
 {
-  this->config = config;
+  this->pipeline_data = pipeline_data;
+  this->config = pipeline_data->config;
 
   this->confidence = 0;
 
@@ -33,20 +37,18 @@ CharacterSegmenter::CharacterSegmenter(Mat img, bool invertedColors, Config* con
   timespec startTime;
   getTime(&startTime);
 
-  Mat img_gray(img.size(), CV_8U);
-  cvtColor( img, img_gray, CV_BGR2GRAY );
 
-  medianBlur(img_gray, img_gray, 3);
+  medianBlur(pipeline_data->crop_gray, pipeline_data->crop_gray, 3);
 
-  if (invertedColors)
-    bitwise_not(img_gray, img_gray);
+  if (pipeline_data->plate_inverted)
+    bitwise_not(pipeline_data->crop_gray, pipeline_data->crop_gray);
 
-  charAnalysis = new CharacterAnalysis(img_gray, config);
+  charAnalysis = new CharacterAnalysis(pipeline_data);
   charAnalysis->analyze();
 
   if (this->config->debugCharSegmenter)
   {
-    displayImage(config, "CharacterSegmenter  Thresholds", drawImageDashboard(charAnalysis->thresholds, CV_8U, 3));
+    displayImage(config, "CharacterSegmenter  Thresholds", drawImageDashboard(pipeline_data->thresholds, CV_8U, 3));
   }
 
   if (this->config->debugCharSegmenter && charAnalysis->linePolygon.size() > 0)
@@ -104,7 +106,7 @@ CharacterSegmenter::CharacterSegmenter(Mat img, bool invertedColors, Config* con
     float avgCharWidth = median(charWidths.data(), charWidths.size());
     float avgCharHeight = median(charHeights.data(), charHeights.size());
 
-    removeSmallContours(charAnalysis->thresholds, charAnalysis->allContours, avgCharWidth, avgCharHeight);
+    removeSmallContours(pipeline_data->thresholds, charAnalysis->allContours, avgCharWidth, avgCharHeight);
 
     // Do the histogram analysis to figure out char regions
 
@@ -116,18 +118,20 @@ CharacterSegmenter::CharacterSegmenter(Mat img, bool invertedColors, Config* con
     vector<Rect> allBoxes;
     for (int i = 0; i < charAnalysis->allContours.size(); i++)
     {
-      Mat histogramMask = Mat::zeros(charAnalysis->thresholds[i].size(), CV_8U);
+      Mat histogramMask = Mat::zeros(pipeline_data->thresholds[i].size(), CV_8U);
 
       fillConvexPoly(histogramMask, charAnalysis->linePolygon.data(), charAnalysis->linePolygon.size(), Scalar(255,255,255));
 
-      VerticalHistogram vertHistogram(charAnalysis->thresholds[i], histogramMask);
+      VerticalHistogram vertHistogram(pipeline_data->thresholds[i], histogramMask);
 
       if (this->config->debugCharSegmenter)
       {
         Mat histoCopy(vertHistogram.histoImg.size(), vertHistogram.histoImg.type());
         //vertHistogram.copyTo(histoCopy);
         cvtColor(vertHistogram.histoImg, histoCopy, CV_GRAY2RGB);
-        allHistograms.push_back(histoCopy);
+
+	string label = "threshold: " + toString(i);
+        allHistograms.push_back(addLabel(histoCopy, label));
       }
 
 //
@@ -141,7 +145,7 @@ CharacterSegmenter::CharacterSegmenter(Mat img, bool invertedColors, Config* con
           rectangle(allHistograms[i], charBoxes[cboxIdx], Scalar(0, 255, 0));
         }
 
-        Mat histDashboard = drawImageDashboard(allHistograms, allHistograms[0].type(), 3);
+        Mat histDashboard = drawImageDashboard(allHistograms, allHistograms[0].type(), 1);
         displayImage(config, "Char seg histograms", histDashboard);
       }
 
@@ -168,16 +172,16 @@ CharacterSegmenter::CharacterSegmenter(Mat img, bool invertedColors, Config* con
     }
 
     //ColorFilter colorFilter(img, charAnalysis->getCharacterMask());
-    vector<Rect> candidateBoxes = getBestCharBoxes(charAnalysis->thresholds[0], allBoxes, medianCharWidth);
+    vector<Rect> candidateBoxes = getBestCharBoxes(pipeline_data->thresholds[0], allBoxes, medianCharWidth);
 
     if (this->config->debugCharSegmenter)
     {
       // Setup the dashboard images to show the cleaning filters
-      for (int i = 0; i < charAnalysis->thresholds.size(); i++)
+      for (int i = 0; i < pipeline_data->thresholds.size(); i++)
       {
-        Mat cleanImg = Mat::zeros(charAnalysis->thresholds[i].size(), charAnalysis->thresholds[i].type());
-        Mat boxMask = getCharBoxMask(charAnalysis->thresholds[i], candidateBoxes);
-        charAnalysis->thresholds[i].copyTo(cleanImg);
+        Mat cleanImg = Mat::zeros(pipeline_data->thresholds[i].size(), pipeline_data->thresholds[i].type());
+        Mat boxMask = getCharBoxMask(pipeline_data->thresholds[i], candidateBoxes);
+        pipeline_data->thresholds[i].copyTo(cleanImg);
         bitwise_and(cleanImg, boxMask, cleanImg);
         cvtColor(cleanImg, cleanImg, CV_GRAY2BGR);
 
@@ -189,19 +193,19 @@ CharacterSegmenter::CharacterSegmenter(Mat img, bool invertedColors, Config* con
 
     getTime(&startTime);
 
-    filterEdgeBoxes(charAnalysis->thresholds, candidateBoxes, medianCharWidth, avgCharHeight);
+    filterEdgeBoxes(pipeline_data->thresholds, candidateBoxes, medianCharWidth, avgCharHeight);
 
-    candidateBoxes = filterMostlyEmptyBoxes(charAnalysis->thresholds, candidateBoxes);
+    candidateBoxes = filterMostlyEmptyBoxes(pipeline_data->thresholds, candidateBoxes);
 
     candidateBoxes = combineCloseBoxes(candidateBoxes, medianCharWidth);
 
-    cleanCharRegions(charAnalysis->thresholds, candidateBoxes);
-    cleanMostlyFullBoxes(charAnalysis->thresholds, candidateBoxes);
+    cleanCharRegions(pipeline_data->thresholds, candidateBoxes);
+    cleanMostlyFullBoxes(pipeline_data->thresholds, candidateBoxes);
 
     //cleanBasedOnColor(thresholds, colorFilter.colorMask, candidateBoxes);
 
-    candidateBoxes = filterMostlyEmptyBoxes(charAnalysis->thresholds, candidateBoxes);
-    this->characters = candidateBoxes;
+    candidateBoxes = filterMostlyEmptyBoxes(pipeline_data->thresholds, candidateBoxes);
+    pipeline_data->charRegions = candidateBoxes;
 
     if (config->debugTiming)
     {
@@ -212,7 +216,7 @@ CharacterSegmenter::CharacterSegmenter(Mat img, bool invertedColors, Config* con
 
     if (this->config->debugCharSegmenter)
     {
-      Mat imgDash = drawImageDashboard(charAnalysis->thresholds, CV_8U, 3);
+      Mat imgDash = drawImageDashboard(pipeline_data->thresholds, CV_8U, 3);
       displayImage(config, "Segmentation after cleaning", imgDash);
 
       Mat generalDash = drawImageDashboard(this->imgDbgGeneral, this->imgDbgGeneral[0].type(), 2);
@@ -486,7 +490,7 @@ vector<Rect> CharacterSegmenter::combineCloseBoxes( vector<Rect> charBoxes, floa
       newCharBoxes.push_back(bigRect);
       if (this->config->debugCharSegmenter)
       {
-        for (int z = 0; z < charAnalysis->thresholds.size(); z++)
+        for (int z = 0; z < pipeline_data->thresholds.size(); z++)
         {
           Point center(bigRect.x + bigRect.width / 2, bigRect.y + bigRect.height / 2);
           RotatedRect rrect(center, Size2f(bigRect.width, bigRect.height + (bigRect.height / 2)), 0);
@@ -511,7 +515,7 @@ void CharacterSegmenter::cleanCharRegions(vector<Mat> thresholds, vector<Rect> c
   const float MIN_SPECKLE_HEIGHT_PERCENT = 0.13;
   const float MIN_SPECKLE_WIDTH_PX = 3;
   const float MIN_CONTOUR_AREA_PERCENT = 0.1;
-  const float MIN_CONTOUR_HEIGHT_PERCENT = 0.60;
+  const float MIN_CONTOUR_HEIGHT_PERCENT = config->segmentationMinCharHeightPercent;
 
   Mat mask = getCharBoxMask(thresholds[0], charRegions);
 
@@ -703,7 +707,7 @@ vector<Rect> CharacterSegmenter::filterMostlyEmptyBoxes(vector<Mat> thresholds, 
   // clear all data for every box #3.
 
   //const float MIN_AREA_PERCENT = 0.1;
-  const float MIN_CONTOUR_HEIGHT_PERCENT = 0.65;
+  const float MIN_CONTOUR_HEIGHT_PERCENT = config->segmentationMinCharHeightPercent;
 
   Mat mask = getCharBoxMask(thresholds[0], charRegions);
 
@@ -1136,7 +1140,4 @@ Mat CharacterSegmenter::getCharBoxMask(Mat img_threshold, vector<Rect> charBoxes
   return mask;
 }
 
-vector<Mat> CharacterSegmenter::getThresholds()
-{
-  return charAnalysis->thresholds;
-}
+

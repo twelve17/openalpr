@@ -22,9 +22,9 @@
 
 // ALPR code
 
-Alpr::Alpr(const std::string country, const std::string configFile)
+Alpr::Alpr(const std::string country, const std::string configFile, const std::string runtimeDir)
 {
-  impl = new AlprImpl(country, configFile);
+  impl = new AlprImpl(country, configFile, runtimeDir);
 }
 
 Alpr::~Alpr()
@@ -41,14 +41,14 @@ std::vector<AlprResult> Alpr::recognize(std::string filepath)
 std::vector<AlprResult> Alpr::recognize(std::vector<unsigned char> imageBuffer)
 {
   // Not sure if this actually works
-  cv::Mat img = cv::imdecode(Mat(imageBuffer), 1);
+  cv::Mat img = cv::imdecode(cv::Mat(imageBuffer), 1);
 
   return impl->recognize(img);
 }
 
-string Alpr::toJson(const vector< AlprResult > results)
+std::string Alpr::toJson(const std::vector< AlprResult > results, double processing_time_ms)
 {
-  return impl->toJson(results);
+  return impl->toJson(results, processing_time_ms);
 }
 
 void Alpr::setDetectRegion(bool detectRegion)

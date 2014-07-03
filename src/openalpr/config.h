@@ -32,26 +32,27 @@
 #include <stdlib.h>     /* getenv */
 #include <math.h>
 
-using namespace std;
-
-
 
 class Config
 {
 
   public:
-    Config(const std::string country, const std::string config_file = "");
+    Config(const std::string country, const std::string config_file = "", const std::string runtime_dir = "");
     virtual ~Config();
-    bool loaded;
 
-    string country;
+    bool loaded;
+    
+    std::string country;
     
     int gpu_mode;
     int multithreading_cores;
     
     float detection_iteration_increase;
+    int detectionStrictness;
     float maxPlateWidthPercent;
     float maxPlateHeightPercent;
+    int maxDetectionInputWidth;
+    int maxDetectionInputHeight;
     
     int maxPlateAngleDegrees;
     
@@ -87,7 +88,7 @@ class Config
     float segmentationMinCharHeightPercent;
     float segmentationMaxCharWidthvsAverage;
     
-    string ocrLanguage;
+    std::string ocrLanguage;
     int ocrMinFontSize;
     
     float postProcessMinConfidence;
@@ -113,22 +114,22 @@ class Config
     
     void debugOff();
    
-    string getKeypointsRuntimeDir();
-    string getCascadeRuntimeDir();
-    string getPostProcessRuntimeDir();
-    string getTessdataPrefix();
+    std::string getKeypointsRuntimeDir();
+    std::string getCascadeRuntimeDir();
+    std::string getPostProcessRuntimeDir();
+    std::string getTessdataPrefix();
 
 private:
     CSimpleIniA* ini;
 
-    string runtimeBaseDir;
+    std::string runtimeBaseDir;
     
-    void loadValues(string country);
+    void loadValues(std::string country);
     
-    int getInt(string section, string key, int defaultValue);
-    float getFloat(string section, string key, float defaultValue);
-    string getString(string section, string key, string defaultValue);
-    bool getBoolean(string section, string key, bool defaultValue);
+    int getInt(std::string section, std::string key, int defaultValue);
+    float getFloat(std::string section, std::string key, float defaultValue);
+    std::string getString(std::string section, std::string key, std::string defaultValue);
+    bool getBoolean(std::string section, std::string key, bool defaultValue);
 };
 
 
@@ -138,5 +139,4 @@ enum GPU_MODE
   GPU_CUDA=1,
   GPU_OPENCL=2
 };
-
 #endif // OPENALPR_CONFIG_H

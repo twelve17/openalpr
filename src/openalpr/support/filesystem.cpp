@@ -21,6 +21,19 @@ bool hasEnding (std::string const &fullString, std::string const &ending)
   }
 }
 
+bool hasEndingInsensitive(const std::string& fullString, const std::string& ending)
+{
+  if (fullString.length() < ending.length())
+    return false;
+  
+  int startidx = fullString.length() - ending.length();
+  
+  for (unsigned int i = startidx; i < fullString.length(); ++i)
+      if (tolower(fullString[i]) != tolower(ending[i - startidx]))
+	  return false;
+  return true;
+}
+
 bool DirectoryExists( const char* pzPath )
 {
   if ( pzPath == NULL) return false;
@@ -87,4 +100,10 @@ bool stringCompare( const std::string &left, const std::string &right )
   if( left.size() < right.size() )
     return true;
   return false;
+}
+
+std::string filenameWithoutExtension(std::string filename)
+{
+  int lastindex = filename.find_last_of("."); 
+  return filename.substr(0, lastindex); 
 }
