@@ -116,7 +116,7 @@ vector<PlateRegion> RegionDetector::doCascade(Mat frame)
   if (config->gpu_mode == GPU_OPENCL)
   {
     ocl::oclMat openclFrame(frame);
-    ((ocl::OclCascadeClassifier*) plate_cascade)->detectMultiScale(openclFrame, plates, config->detection_iteration_increase, config->detectionStrictness,, 0, minSize, maxSize);
+    ((ocl::OclCascadeClassifier*) plate_cascade)->detectMultiScale(openclFrame, plates, config->detection_iteration_increase, config->detectionStrictness, 0, minSize, maxSize);
   }
   else if (config->gpu_mode == GPU_CUDA)
   {
@@ -124,7 +124,7 @@ vector<PlateRegion> RegionDetector::doCascade(Mat frame)
     Mat plateregions_downloaded;
     
     cudaFrame.upload(frame);
-    int numdetected = cuda_cascade->detectMultiScale(cudaFrame, plateregions_buffer, (double) config->detection_iteration_increase, config->detectionStrictness,, minSize);
+    int numdetected = cuda_cascade->detectMultiScale(cudaFrame, plateregions_buffer, (double) config->detection_iteration_increase, config->detectionStrictness, minSize);
     plateregions_buffer.colRange(0, numdetected).download(plateregions_downloaded);
     
     for (int i = 0; i < numdetected; ++i)
