@@ -5,13 +5,13 @@
 
 #include "daemon/beanstalk.hpp"
 #include "daemon/uuid.h"
+#include "daemon/logging_videobuffer.h"
 
 #include "tclap/CmdLine.h"
 #include "alpr.h"
 #include "openalpr/simpleini/simpleini.h"
 #include "openalpr/cjson.h"
 #include "support/tinythread.h"
-#include "videobuffer.h"
 #include <curl/curl.h>
 #include "support/timing.h"
 
@@ -28,7 +28,7 @@ bool uploadPost(std::string url, std::string data);
 void dataUploadThread(void* arg);
 
 // Constants
-const std::string DEFAULT_LOG_FILE_PATH="/var/log/openalpr.log";
+const std::string DEFAULT_LOG_FILE_PATH="/var/log/alprd.log";
 const std::string DAEMON_CONFIG_FILE_PATH="/etc/openalpr/alprd.conf";
 
 const std::string BEANSTALK_QUEUE_HOST="127.0.0.1";
@@ -84,6 +84,7 @@ int main( int argc, const char** argv )
   try
   {
     
+    cmd.add( countryCodeArg );
     cmd.add( topNArg );
     cmd.add( configFileArg );
     cmd.add( logFileArg );
@@ -230,7 +231,7 @@ void streamRecognitionThread(void* arg)
   
   int framenum = 0;
   
-  VideoBuffer videoBuffer;
+  LoggingVideoBuffer videoBuffer(logger);
   
   videoBuffer.connect(tdata->stream_url, 5);
   
