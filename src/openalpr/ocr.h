@@ -34,25 +34,27 @@
 
 #include "tesseract/baseapi.h"
 
-class OCR
+namespace alpr
 {
 
-  public:
-    OCR(Config* config);
-    virtual ~OCR();
+  class OCR
+  {
 
-    void performOCR(PipelineData* pipeline_data);
+    public:
+      OCR(Config* config);
+      virtual ~OCR();
 
-    PostProcess* postProcessor;
-    //string recognizedText;
-    //float confidence;
-    //float overallConfidence;
+      void performOCR(PipelineData* pipeline_data);
 
-  private:
-    Config* config;
+      PostProcess postProcessor;
 
-    tesseract::TessBaseAPI *tesseract;
+    private:
+      Config* config;
 
-};
+      tesseract::TessBaseAPI tesseract;
+
+  };
+
+}
 
 #endif // OPENALPR_OCR_H

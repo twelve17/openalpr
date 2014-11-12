@@ -35,6 +35,7 @@
 
 using namespace std;
 using namespace cv;
+using namespace alpr;
 
 // Given a directory full of lp images (named [statecode]#.png) crop out the alphanumeric characters.
 // These will be used to train the OCR
@@ -114,16 +115,17 @@ int main( int argc, const char** argv )
         statecode[2] = '\0';
         string statecodestr(statecode);
 
-        CharacterRegion charRegion(&pipeline_data);
+        CharacterAnalysis charRegion(&pipeline_data);
 
-        if (abs(charRegion.getTopLine().angle) > 4)
+        if (pipeline_data.textLines.size() > 0 &&
+            abs(pipeline_data.textLines[0].angle) > 4)
         {
           // Rotate image:
           Mat rotated(frame.size(), frame.type());
           Mat rot_mat( 2, 3, CV_32FC1 );
           Point center = Point( frame.cols/2, frame.rows/2 );
 
-          rot_mat = getRotationMatrix2D( center, charRegion.getTopLine().angle, 1.0 );
+          rot_mat = getRotationMatrix2D( center, pipeline_data.textLines[0].angle, 1.0 );
           warpAffine( frame, rotated, rot_mat, frame.size() );
 
           rotated.copyTo(frame);
@@ -132,9 +134,9 @@ int main( int argc, const char** argv )
 
         CharacterSegmenter charSegmenter(&pipeline_data);
         ocr->performOCR(&pipeline_data);
-        ocr->postProcessor->analyze(statecode, 25);
+        ocr->postProcessor.analyze(statecode, 25);
 
-        cout << files[i] << "," << statecode << "," << ocr->postProcessor->bestChars << endl;
+        cout << files[i] << "," << statecode << "," << ocr->postProcessor.bestChars << endl;
 
         imshow("Current LP", frame);
         waitKey(5);
@@ -249,7 +251,7 @@ int main( int argc, const char** argv )
             ocrTimes.push_back(ocrTime);
 
             getTime(&startTime);
-            ocr.postProcessor->analyze("", 25);
+            ocr.postProcessor.analyze("", 25);
             getTime(&endTime);
             double postProcessTime = diffclock(startTime, endTime);
             cout << "\tRegion " << z << ": PostProcess time: " << postProcessTime << "ms." << endl;

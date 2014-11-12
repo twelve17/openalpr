@@ -22,74 +22,111 @@
 
 #include <iostream>
 #include <vector>
+#include <fstream> 
 
-
-struct AlprPlate
+namespace alpr
 {
-  std::string characters;
-  float overall_confidence;
+  
+  struct AlprPlate
+  {
+    std::string characters;
+    float overall_confidence;
 
-  bool matches_template;
-};
+    bool matches_template;
+  };
 
-struct AlprCoordinate
-{
-  int x;
-  int y;
-};
+  struct AlprCoordinate
+  {
+    int x;
+    int y;
+  };
 
-struct AlprRegionOfInterest
-{
-  int x;
-  int y;
-  int width;
-  int height;
-};
-
-class AlprResult
-{
+  class AlprRegionOfInterest
+  {
   public:
-    AlprResult();
-    virtual ~AlprResult();
+    AlprRegionOfInterest();
+    AlprRegionOfInterest(int x, int y, int width, int height)
+    {
+      this->x = x;
+      this->y = y;
+      this->width = width;
+      this->height = height;
+    };
 
-    int requested_topn;
-    int result_count;
+    int x;
+    int y;
+    int width;
+    int height;
+  };
 
-    AlprPlate bestPlate;
-    std::vector<AlprPlate> topNPlates;
+  class AlprPlateResult
+  {
+    public:
+      AlprPlateResult() {};
+      virtual ~AlprPlateResult() {};
 
-    float processing_time_ms;
-    AlprCoordinate plate_points[4];
+      int requested_topn;
 
-    int regionConfidence;
-    std::string region;
-};
+      AlprPlate bestPlate;
+      std::vector<AlprPlate> topNPlates;
 
-class AlprImpl;
-class Alpr
-{
+      float processing_time_ms;
+      AlprCoordinate plate_points[4];
 
-  public:
-    Alpr(const std::string country, const std::string configFile = "", const std::string runtimeDir = "");
-    virtual ~Alpr();
+      int regionConfidence;
+      std::string region;
+  };
 
-    void setDetectRegion(bool detectRegion);
-    void setTopN(int topN);
-    void setDefaultRegion(std::string region);
+  class AlprResults
+  {
+    public:
+      AlprResults() {};
+      virtual ~AlprResults() {};
 
-    std::vector<AlprResult> recognize(std::string filepath);
-    std::vector<AlprResult> recognize(std::string filepath, std::vector<AlprRegionOfInterest> regionsOfInterest);
-    std::vector<AlprResult> recognize(std::vector<unsigned char> imageBuffer);
-    std::vector<AlprResult> recognize(std::vector<unsigned char> imageBuffer, std::vector<AlprRegionOfInterest> regionsOfInterest);
+      long epoch_time;
+      int img_width;
+      int img_height;
+      float total_processing_time_ms;
 
-    std::string toJson(const std::vector<AlprResult> results, double processing_time_ms = -1, long epoch_time = -1);
+      std::vector<AlprPlateResult> plates;
 
-    bool isLoaded();
-    
-    static std::string getVersion();
+      std::vector<AlprRegionOfInterest> regionsOfInterest;
 
-  private:
-    AlprImpl* impl;
-};
+  };
 
+
+  class AlprImpl;
+  class Alpr
+  {
+
+    public:
+      Alpr(const std::string country, const std::string configFile = "", const std::string runtimeDir = "");
+      virtual ~Alpr();
+
+      void setDetectRegion(bool detectRegion);
+      void setTopN(int topN);
+      void setDefaultRegion(std::string region);
+
+      // Recognize from an image on disk
+      AlprResults recognize(std::string filepath);
+
+      // Recognize from byte data representing an encoded image (e.g., BMP, PNG, JPG, GIF etc).
+      AlprResults recognize(std::vector<char> imageBytes);
+
+      // Recognize from raw pixel data.  
+      AlprResults recognize(unsigned char* pixelData, int bytesPerPixel, int imgWidth, int imgHeight, std::vector<AlprRegionOfInterest> regionsOfInterest);
+
+
+      static std::string toJson(const AlprResults results);
+      static AlprResults fromJson(std::string json);
+
+      bool isLoaded();
+
+      static std::string getVersion();
+
+    private:
+      AlprImpl* impl;
+  };
+
+}
 #endif // OPENALPR_APLR_H

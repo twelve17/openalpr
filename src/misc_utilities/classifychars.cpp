@@ -32,6 +32,7 @@
 
 using namespace std;
 using namespace cv;
+using namespace alpr;
 
 // Given a directory full of lp images (named [statecode]#.png) crop out the alphanumeric characters.
 // These will be used to train the OCR
@@ -132,16 +133,16 @@ int main( int argc, const char** argv )
         statecode[2] = '\0';
         string statecodestr(statecode);
 
-        CharacterRegion regionizer(&pipeline_data);
+        CharacterAnalysis regionizer(&pipeline_data);
 
-        if (abs(regionizer.getTopLine().angle) > 4)
+        if (abs(pipeline_data.textLines[0].angle) > 4)
         {
           // Rotate image:
           Mat rotated(frame.size(), frame.type());
           Mat rot_mat( 2, 3, CV_32FC1 );
           Point center = Point( frame.cols/2, frame.rows/2 );
 
-          rot_mat = getRotationMatrix2D( center, regionizer.getTopLine().angle, 1.0 );
+          rot_mat = getRotationMatrix2D( center, pipeline_data.textLines[0].angle, 1.0 );
           warpAffine( frame, rotated, rot_mat, frame.size() );
 
           rotated.copyTo(frame);
@@ -153,8 +154,8 @@ int main( int argc, const char** argv )
         //ocr.cleanCharRegions(charSegmenter.thresholds, charSegmenter.characters);
 
         ocr.performOCR(&pipeline_data);
-        ocr.postProcessor->analyze(statecodestr, 25);
-        cout << "OCR results: " << ocr.postProcessor->bestChars << endl;
+        ocr.postProcessor.analyze(statecodestr, 25);
+        cout << "OCR results: " << ocr.postProcessor.bestChars << endl;
 
         vector<bool> selectedBoxes(pipeline_data.thresholds.size());
         for (int z = 0; z < pipeline_data.thresholds.size(); z++)
@@ -221,7 +222,7 @@ int main( int argc, const char** argv )
             {
               selectedBoxes[curDashboardSelection] = true;
               showDashboard(pipeline_data.thresholds, selectedBoxes, curDashboardSelection);
-              const std::string& ocr_str = ocr.postProcessor->bestChars;
+              const std::string& ocr_str = ocr.postProcessor.bestChars;
               humanInputs.assign(ocr_str.begin(), ocr_str.end());
             }
 

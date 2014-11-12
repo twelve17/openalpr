@@ -2,6 +2,7 @@
 
 #include <unistd.h>
 #include <sstream>
+#include <execinfo.h>
 
 #include "daemon/beanstalk.hpp"
 #include "video/logging_videobuffer.h"
@@ -20,6 +21,8 @@
 #include <log4cplus/consoleappender.h>
 #include <log4cplus/fileappender.h>
 
+using namespace alpr;
+
 // prototypes
 void streamRecognitionThread(void* arg);
 bool writeToQueue(std::string jsonResult);
@@ -27,12 +30,14 @@ bool uploadPost(std::string url, std::string data);
 void dataUploadThread(void* arg);
 
 // Constants
+const std::string ALPRD_CONFIG_FILE_NAME="alprd.conf";
+const std::string OPENALPR_CONFIG_FILE_NAME="openalpr.conf";
 const std::string DEFAULT_LOG_FILE_PATH="/var/log/alprd.log";
-const std::string DAEMON_CONFIG_FILE_PATH="/etc/openalpr/alprd.conf";
 
 const std::string BEANSTALK_QUEUE_HOST="127.0.0.1";
 const int BEANSTALK_PORT=11300;
 const std::string BEANSTALK_TUBE_NAME="alprd";
+
 
 struct CaptureThreadData
 {
@@ -54,27 +59,37 @@ struct UploadThreadData
   std::string upload_url;
 };
 
+void segfault_handler(int sig) {
+  void *array[10];
+  size_t size;
+
+  // get void*'s for all entries on the stack
+  size = backtrace(array, 10);
+
+  // print out all the frames to stderr
+  fprintf(stderr, "Error: signal %d:\n", sig);
+  backtrace_symbols_fd(array, size, STDERR_FILENO);
+  exit(1);
+}
+
 bool daemon_active;
 
 static log4cplus::Logger logger;
 
 int main( int argc, const char** argv )
 {
+  signal(SIGSEGV, segfault_handler);   // install our segfault handler
   daemon_active = true;
 
   bool noDaemon = false;
   bool clockOn = false;
   std::string logFile;
-  int topn;
   
-  std::string configFile;
-  std::string country;
+  std::string configDir;
 
   TCLAP::CmdLine cmd("OpenAlpr Daemon", ' ', Alpr::getVersion());
 
-  TCLAP::ValueArg<std::string> countryCodeArg("c","country","Country code to identify (either us for USA or eu for Europe).  Default=us",false, "us" ,"country_code");
-  TCLAP::ValueArg<std::string> configFileArg("","config","Path to the openalpr.conf file.",false, "" ,"config_file");
-  TCLAP::ValueArg<int> topNArg("n","topn","Max number of possible plate numbers to return.  Default=25",false, 25 ,"topN");
+  TCLAP::ValueArg<std::string> configDirArg("","config","Path to the openalpr config directory that contains alprd.conf and openalpr.conf. (Default: /etc/openalpr/)",false, "/etc/openalpr/" ,"config_file");
   TCLAP::ValueArg<std::string> logFileArg("l","log","Log file to write to.  Default=" + DEFAULT_LOG_FILE_PATH,false, DEFAULT_LOG_FILE_PATH ,"topN");
 
   TCLAP::SwitchArg daemonOffSwitch("f","foreground","Set this flag for debugging.  Disables forking the process as a daemon and runs in the foreground.  Default=off", cmd, false);
@@ -83,9 +98,7 @@ int main( int argc, const char** argv )
   try
   {
     
-    cmd.add( countryCodeArg );
-    cmd.add( topNArg );
-    cmd.add( configFileArg );
+    cmd.add( configDirArg );
     cmd.add( logFileArg );
 
     
@@ -95,16 +108,33 @@ int main( int argc, const char** argv )
       return 1;
     }
 
-    country = countryCodeArg.getValue();
-    configFile = configFileArg.getValue();
+    // Make sure configDir ends in a slash
+    configDir = configDirArg.getValue();
+    if (hasEnding(configDir, "/") == false)
+      configDir = configDir + "/";
+    
     logFile = logFileArg.getValue();
-    topn = topNArg.getValue();
     noDaemon = daemonOffSwitch.getValue();
     clockOn = clockSwitch.getValue();
   }
   catch (TCLAP::ArgException &e)    // catch any exceptions
   {
     std::cerr << "error: " << e.error() << " for arg " << e.argId() << std::endl;
+    return 1;
+  }
+  
+  std::string openAlprConfigFile = configDir + OPENALPR_CONFIG_FILE_NAME;
+  std::string daemonConfigFile = configDir + ALPRD_CONFIG_FILE_NAME;
+  
+  // Validate that the configuration files exist
+  if (fileExists(openAlprConfigFile.c_str()) == false)
+  {
+    std::cerr << "error, openalpr.conf file does not exist at: " << openAlprConfigFile << std::endl;
+    return 1;
+  }
+  if (fileExists(daemonConfigFile.c_str()) == false)
+  {
+    std::cerr << "error, alprd.conf file does not exist at: " << daemonConfigFile << std::endl;
     return 1;
   }
   
@@ -140,7 +170,7 @@ int main( int argc, const char** argv )
   CSimpleIniA ini;
   ini.SetMultiKey();
   
-  ini.LoadFile(DAEMON_CONFIG_FILE_PATH.c_str());
+  ini.LoadFile(daemonConfigFile.c_str());
   
   std::vector<std::string> stream_urls;
   
@@ -164,12 +194,16 @@ int main( int argc, const char** argv )
     return 1;
   }
   
+  std::string country = ini.GetValue("daemon", "country", "us");
+  int topn = ini.GetLongValue("daemon", "topn", 20);
+  
   bool storePlates = ini.GetBoolValue("daemon", "store_plates", false);
   std::string imageFolder = ini.GetValue("daemon", "store_plates_location", "/tmp/");
   bool uploadData = ini.GetBoolValue("daemon", "upload_data", false);
   std::string upload_url = ini.GetValue("daemon", "upload_address", "");
   std::string site_id = ini.GetValue("daemon", "site_id", "");
   
+  LOG4CPLUS_INFO(logger, "Using: " << daemonConfigFile << " for daemon configuration");
   LOG4CPLUS_INFO(logger, "Using: " << imageFolder << " for storing valid plate images");
   
   pid_t pid;
@@ -183,7 +217,7 @@ int main( int argc, const char** argv )
       CaptureThreadData* tdata = new CaptureThreadData();
       tdata->stream_url = stream_urls[i];
       tdata->camera_id = i + 1;
-      tdata->config_file = configFile;
+      tdata->config_file = openAlprConfigFile;
       tdata->output_images = storePlates;
       tdata->output_image_folder = imageFolder;
       tdata->country_code = country;
@@ -250,8 +284,11 @@ void streamRecognitionThread(void* arg)
       
       timespec startTime;
       getTime(&startTime);
-      cv::imencode(".bmp", latestFrame, buffer );
-      std::vector<AlprResult> results = alpr.recognize(buffer);
+      
+      std::vector<AlprRegionOfInterest> regionsOfInterest;
+      regionsOfInterest.push_back(AlprRegionOfInterest(0,0, latestFrame.cols, latestFrame.rows));
+
+      AlprResults results = alpr.recognize(latestFrame.data, latestFrame.elemSize(), latestFrame.cols, latestFrame.rows, regionsOfInterest);
       
       timespec endTime;
       getTime(&endTime);
@@ -262,7 +299,7 @@ void streamRecognitionThread(void* arg)
 	LOG4CPLUS_INFO(logger, "Camera " << tdata->camera_id << " processed frame in: " << totalProcessingTime << " ms.");
       }
       
-      if (results.size() > 0)
+      if (results.plates.size() > 0)
       {
         long epoch_time = getEpochTime();
         
@@ -281,7 +318,7 @@ void streamRecognitionThread(void* arg)
 	
 	// Update the JSON content to include UUID and camera ID
   
-	std::string json = alpr.toJson(results, totalProcessingTime, epoch_time);
+	std::string json = alpr.toJson(results);
 	
 	cJSON *root = cJSON_Parse(json.c_str());
 	cJSON_AddStringToObject(root,	"uuid",		uuid.c_str());
@@ -299,9 +336,9 @@ void streamRecognitionThread(void* arg)
 	free(out);
 	
 	// Push the results to the Beanstalk queue
-	for (int j = 0; j < results.size(); j++)
+	for (int j = 0; j < results.plates.size(); j++)
 	{
-	  LOG4CPLUS_DEBUG(logger, "Writing plate " << results[j].bestPlate.characters << " (" <<  uuid << ") to queue.");
+	  LOG4CPLUS_DEBUG(logger, "Writing plate " << results.plates[j].bestPlate.characters << " (" <<  uuid << ") to queue.");
 	}
 	
 	writeToQueue(response);

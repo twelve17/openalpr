@@ -15,13 +15,20 @@ set(lpr_source_files
  ocr.cpp
  postprocess.cpp
  binarize_wolf.cpp
- platelines.cpp
- characterregion.cpp
  segmentation/charactersegmenter.cpp
  segmentation/verticalhistogram.cpp
- platecorners.cpp
+ edges/edgefinder.cpp
+ edges/platecorners.cpp
+ edges/platelines.cpp
+ edges/textlinecollection.cpp
+ edges/scorekeeper.cpp
  colorfilter.cpp
- characteranalysis.cpp
+ transformation.cpp
+ textdetection/characteranalysis.cpp
+ textdetection/platemask.cpp
+ textdetection/textcontours.cpp
+ textdetection/textline.cpp
+ textdetection/linefinder.cpp
  pipeline_data.cpp
  trex.c
  cjson.c

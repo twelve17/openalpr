@@ -17,44 +17,32 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef OPENALPR_PLATELINES_H
-#define OPENALPR_PLATELINES_H
+#ifndef OPENALPR_EDGEFINDER_H
+#define	OPENALPR_EDGEFINDER_H
 
-#include "opencv2/highgui/highgui.hpp"
 #include "opencv2/imgproc/imgproc.hpp"
-#include "utility.h"
-#include "binarize_wolf.h"
-#include "config.h"
-#include "characterregion.h"
+#include "pipeline_data.h"
+#include "transformation.h"
+#include "platelines.h"
+#include "platecorners.h"
 
-struct PlateLine
+namespace alpr
 {
-  LineSegment line;
-  float confidence;
-};
-
-class PlateLines
-{
-
+  
+  class EdgeFinder {
   public:
-    PlateLines(Config* config);
-    virtual ~PlateLines();
+    EdgeFinder(PipelineData* pipeline_data);
+    virtual ~EdgeFinder();
 
-    void processImage(cv::Mat img, CharacterRegion* charRegion, float sensitivity=1.0);
+    std::vector<cv::Point2f> findEdgeCorners();
 
-    std::vector<PlateLine> horizontalLines;
-    std::vector<PlateLine> verticalLines;
-
-    std::vector<cv::Point> winningCorners;
+    float confidence;
 
   private:
-    
-    Config* config;
-    bool debug;
+    PipelineData* pipeline_data;
 
-    cv::Mat customGrayscaleConversion(cv::Mat src);
-    void findLines(cv::Mat inputImage);
-    std::vector<PlateLine> getLines(cv::Mat edges, float sensitivityMultiplier, bool vertical);
-};
+  };
 
-#endif // OPENALPR_PLATELINES_H
+}
+#endif	/* OPENALPR_EDGEFINDER_H */
+

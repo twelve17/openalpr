@@ -52,55 +52,59 @@
 
 #define ALPR_NULL_PTR 0
 
-
-struct AlprFullDetails
-{
-  std::vector<PlateRegion> plateRegions;
-  std::vector<AlprResult> results;
-};
-
-class AlprImpl
+namespace alpr
 {
 
-  public:
-    AlprImpl(const std::string country, const std::string configFile = "", const std::string runtimeDir = "");
-    virtual ~AlprImpl();
+  struct AlprFullDetails
+  {
+    std::vector<PlateRegion> plateRegions;
+    AlprResults results;
+  };
 
-    AlprFullDetails recognizeFullDetails(cv::Mat img);
-    AlprFullDetails recognizeFullDetails(cv::Mat img, std::vector<cv::Rect> regionsOfInterest);
-    
-    std::vector<AlprResult> recognize(std::string filepath, std::vector<AlprRegionOfInterest> regionsOfInterest);
-    std::vector<AlprResult> recognize(std::vector<unsigned char> imageBuffer, std::vector<AlprRegionOfInterest> regionsOfInterest);
-    std::vector<AlprResult> recognize(cv::Mat img, std::vector<cv::Rect> regionsOfInterest);
-    
-    void applyRegionTemplate(AlprResult* result, std::string region);
-    
-    void setDetectRegion(bool detectRegion);
-    void setTopN(int topn);
-    void setDefaultRegion(std::string region);
-    
-    std::string toJson(const std::vector<AlprResult> results, double processing_time_ms = -1, long epoch_time = -1);
-    static std::string getVersion();
-    
-    Config* config;
-    
-    bool isLoaded();
-    
-  private:
-    
-    Detector* plateDetector;
-    StateIdentifier* stateIdentifier;
-    OCR* ocr;
-  
-    int topN;
-    bool detectRegion;
-    std::string defaultRegion;
-    
-    std::vector<cv::Rect> convertRects(std::vector<AlprRegionOfInterest> regionsOfInterest);
-    
-    cJSON* createJsonObj(const AlprResult* result);
-};
+  class AlprImpl
+  {
 
+    public:
+      AlprImpl(const std::string country, const std::string configFile = "", const std::string runtimeDir = "");
+      virtual ~AlprImpl();
+
+      AlprFullDetails recognizeFullDetails(cv::Mat img);
+      AlprFullDetails recognizeFullDetails(cv::Mat img, std::vector<cv::Rect> regionsOfInterest);
+
+      AlprResults recognize( std::vector<char> imageBytes, std::vector<AlprRegionOfInterest> regionsOfInterest );
+      AlprResults recognize( unsigned char* pixelData, int bytesPerPixel, int imgWidth, int imgHeight, std::vector<AlprRegionOfInterest> regionsOfInterest );
+      AlprResults recognize( cv::Mat img, std::vector<cv::Rect> regionsOfInterest );
+
+      void applyRegionTemplate(AlprPlateResult* result, std::string region);
+
+      void setDetectRegion(bool detectRegion);
+      void setTopN(int topn);
+      void setDefaultRegion(std::string region);
+
+      static std::string toJson( const AlprResults results );
+      static AlprResults fromJson(std::string json);
+      static std::string getVersion();
+
+      static cJSON* createJsonObj(const AlprPlateResult* result);
+      
+      Config* config;
+
+      bool isLoaded();
+
+    private:
+
+      Detector* plateDetector;
+      StateIdentifier* stateIdentifier;
+      OCR* ocr;
+
+      int topN;
+      bool detectRegion;
+      std::string defaultRegion;
+
+      std::vector<cv::Rect> convertRects(std::vector<AlprRegionOfInterest> regionsOfInterest);
+
+  };
+}
 
 
 #endif // OPENALPR_ALPRIMPL_H

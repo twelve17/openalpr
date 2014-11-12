@@ -17,135 +17,113 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include <opencv2/core/core.hpp>
+
 #include "licenseplatecandidate.h"
+#include "edges/edgefinder.h"
+#include "transformation.h"
 
 using namespace std;
 using namespace cv;
 
-LicensePlateCandidate::LicensePlateCandidate(PipelineData* pipeline_data)
+namespace alpr
 {
-  this->pipeline_data = pipeline_data;
-  this->config = pipeline_data->config;
 
-}
-
-LicensePlateCandidate::~LicensePlateCandidate()
-{
-  delete charSegmenter;
-}
-
-// Must delete this pointer in parent class
-void LicensePlateCandidate::recognize()
-{
-  charSegmenter = NULL;
-
-  pipeline_data->plate_area_confidence = 0;
-
-  int expandX = round(this->pipeline_data->regionOfInterest.width * 0.20);
-  int expandY = round(this->pipeline_data->regionOfInterest.height * 0.15);
-  // expand box by 15% in all directions
-  Rect expandedRegion = expandRect( this->pipeline_data->regionOfInterest, expandX, expandY, this->pipeline_data->grayImg.cols, this->pipeline_data->grayImg.rows) ;
-
-  pipeline_data->crop_gray = Mat(this->pipeline_data->grayImg, expandedRegion);
-  resize(pipeline_data->crop_gray, pipeline_data->crop_gray, Size(config->templateWidthPx, config->templateHeightPx));
-  
-  
-  CharacterRegion charRegion(pipeline_data);
-
-  if (charRegion.confidence > 10)
+  LicensePlateCandidate::LicensePlateCandidate(PipelineData* pipeline_data)
   {
-    PlateLines plateLines(config);
+    this->pipeline_data = pipeline_data;
+    this->config = pipeline_data->config;
 
-    plateLines.processImage(pipeline_data->plate_mask, &charRegion, 1.10);
-    plateLines.processImage(pipeline_data->crop_gray, &charRegion, 0.9);
+  }
 
-    PlateCorners cornerFinder(pipeline_data->crop_gray, &plateLines, &charRegion, config);
-    vector<Point> smallPlateCorners = cornerFinder.findPlateCorners();
+  LicensePlateCandidate::~LicensePlateCandidate()
+  {
+    delete charSegmenter;
+  }
 
-    if (cornerFinder.confidence > 0)
+  // Must delete this pointer in parent class
+  void LicensePlateCandidate::recognize()
+  {
+    charSegmenter = NULL;
+
+    pipeline_data->plate_area_confidence = 0;
+    pipeline_data->isMultiline = config->multiline;
+
+
+    Rect expandedRegion = this->pipeline_data->regionOfInterest;
+
+    pipeline_data->crop_gray = Mat(this->pipeline_data->grayImg, expandedRegion);
+    resize(pipeline_data->crop_gray, pipeline_data->crop_gray, Size(config->templateWidthPx, config->templateHeightPx));
+
+
+    CharacterAnalysis textAnalysis(pipeline_data);
+
+    if (textAnalysis.confidence > 10)
     {
-      pipeline_data->plate_corners = transformPointsToOriginalImage(this->pipeline_data->grayImg, pipeline_data->crop_gray, expandedRegion, smallPlateCorners);
 
-      pipeline_data->crop_gray = deSkewPlate(this->pipeline_data->grayImg, pipeline_data->plate_corners);
+      EdgeFinder edgeFinder(pipeline_data);
 
-      charSegmenter = new CharacterSegmenter(pipeline_data);
+      pipeline_data->plate_corners = edgeFinder.findEdgeCorners();
 
-      //this->recognizedText = ocr->recognizedText;
-      //strcpy(this->recognizedText, ocr.recognizedText);
+      if (edgeFinder.confidence > 0)
+      {
 
-      pipeline_data->plate_area_confidence = 100;
+        timespec startTime;
+        getTime(&startTime);
+
+
+        Mat originalCrop = pipeline_data->crop_gray;
+
+        Transformation imgTransform(this->pipeline_data->grayImg, pipeline_data->crop_gray, expandedRegion);
+
+        Size cropSize = imgTransform.getCropSize(pipeline_data->plate_corners, 
+                Size(pipeline_data->config->ocrImageWidthPx, pipeline_data->config->ocrImageHeightPx));
+        Mat transmtx = imgTransform.getTransformationMatrix(pipeline_data->plate_corners, cropSize);
+        pipeline_data->crop_gray = imgTransform.crop(cropSize, transmtx);
+
+
+        if (this->config->debugGeneral)
+          displayImage(config, "quadrilateral", pipeline_data->crop_gray);
+
+
+
+        // Apply a perspective transformation to the TextLine objects
+        // to match the newly deskewed license plate crop
+        vector<TextLine> newLines;
+        for (unsigned int i = 0; i < pipeline_data->textLines.size(); i++)
+        {        
+          vector<Point2f> textArea = imgTransform.transformSmallPointsToBigImage(pipeline_data->textLines[i].textArea);
+          vector<Point2f> linePolygon = imgTransform.transformSmallPointsToBigImage(pipeline_data->textLines[i].linePolygon);
+
+          vector<Point2f> textAreaRemapped;
+          vector<Point2f> linePolygonRemapped;
+
+          textAreaRemapped = imgTransform.remapSmallPointstoCrop(textArea, transmtx);
+          linePolygonRemapped = imgTransform.remapSmallPointstoCrop(linePolygon, transmtx);
+
+          newLines.push_back(TextLine(textAreaRemapped, linePolygonRemapped));
+        }
+
+        pipeline_data->textLines.clear();
+        for (unsigned int i = 0; i < newLines.size(); i++)
+          pipeline_data->textLines.push_back(newLines[i]);
+
+
+
+        if (config->debugTiming)
+        {
+          timespec endTime;
+          getTime(&endTime);
+          cout << "deskew Time: " << diffclock(startTime, endTime) << "ms." << endl;
+        }
+
+        charSegmenter = new CharacterSegmenter(pipeline_data);
+
+
+        pipeline_data->plate_area_confidence = 100;
+      }
+
     }
-    charRegion.confidence = 0;
   }
+
 }
-
-// Re-maps the coordinates from the smallImage to the coordinate space of the bigImage.
-vector<Point2f> LicensePlateCandidate::transformPointsToOriginalImage(Mat bigImage, Mat smallImage, Rect region, vector<Point> corners)
-{
-  vector<Point2f> cornerPoints;
-  for (uint i = 0; i < corners.size(); i++)
-  {
-    float bigX = (corners[i].x * ((float) region.width / smallImage.cols));
-    float bigY = (corners[i].y * ((float) region.height / smallImage.rows));
-
-    bigX = bigX + region.x;
-    bigY = bigY + region.y;
-
-    cornerPoints.push_back(Point2f(bigX, bigY));
-  }
-
-  return cornerPoints;
-}
-
-Mat LicensePlateCandidate::deSkewPlate(Mat inputImage, vector<Point2f> corners)
-{
-  
-  timespec startTime;
-  getTime(&startTime);
-  
-  // Figure out the appoximate width/height of the license plate region, so we can maintain the aspect ratio.
-  LineSegment leftEdge(round(corners[3].x), round(corners[3].y), round(corners[0].x), round(corners[0].y));
-  LineSegment rightEdge(round(corners[2].x), round(corners[2].y), round(corners[1].x), round(corners[1].y));
-  LineSegment topEdge(round(corners[0].x), round(corners[0].y), round(corners[1].x), round(corners[1].y));
-  LineSegment bottomEdge(round(corners[3].x), round(corners[3].y), round(corners[2].x), round(corners[2].y));
-
-  float w = distanceBetweenPoints(leftEdge.midpoint(), rightEdge.midpoint());
-  float h = distanceBetweenPoints(bottomEdge.midpoint(), topEdge.midpoint());
-  float aspect = w/h;
-
-  int width = config->ocrImageWidthPx;
-  int height = round(((float) width) / aspect);
-  if (height > config->ocrImageHeightPx)
-  {
-    height = config->ocrImageHeightPx;
-    width = round(((float) height) * aspect);
-  }
-
-  Mat deskewed(height, width, this->pipeline_data->grayImg.type());
-
-  // Corners of the destination image
-  vector<Point2f> quad_pts;
-  quad_pts.push_back(Point2f(0, 0));
-  quad_pts.push_back(Point2f(deskewed.cols, 0));
-  quad_pts.push_back(Point2f(deskewed.cols, deskewed.rows));
-  quad_pts.push_back(Point2f(0, deskewed.rows));
-
-  // Get transformation matrix
-  Mat transmtx = getPerspectiveTransform(corners, quad_pts);
-
-  // Apply perspective transformation
-  warpPerspective(inputImage, deskewed, transmtx, deskewed.size(), INTER_CUBIC);
-
-  if (config->debugTiming)
-  {
-    timespec endTime;
-    getTime(&endTime);
-    cout << "deskew Time: " << diffclock(startTime, endTime) << "ms." << endl;
-  }
-  
-  if (this->config->debugGeneral)
-    displayImage(config, "quadrilateral", deskewed);
-
-  return deskewed;
-}
-

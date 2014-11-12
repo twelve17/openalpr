@@ -1,11 +1,11 @@
 project(src)
 
-
+#set(CMAKE_BUILD_TYPE Debug)
 cmake_minimum_required (VERSION 2.6)
 
 # Set the OpenALPR version in cmake, and also add it as a DEFINE for the code to access
-SET(OPENALPR_MAJOR_VERSION "1")
-SET(OPENALPR_MINOR_VERSION "2")
+SET(OPENALPR_MAJOR_VERSION "2")
+SET(OPENALPR_MINOR_VERSION "0")
 SET(OPENALPR_PATCH_VERSION "0")
 SET(OPENALPR_VERSION ${OPENALPR_MAJOR_VERSION}.${OPENALPR_MINOR_VERSION}.${OPENALPR_PATCH_VERSION})
 
@@ -18,6 +18,9 @@ SET(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake_modules/")
 # TODO: switch to http://www.cmake.org/cmake/help/v2.8.5/cmake.html#module:GNUInstallDirs ?
 IF (NOT CMAKE_INSTALL_SYSCONFDIR) 
   SET(CMAKE_INSTALL_SYSCONFDIR "${CMAKE_INSTALL_PREFIX}/etc")
+ENDIF()
+IF (NOT CMAKE_INSTALL_VARDIR) 
+  SET(CMAKE_INSTALL_VARDIR "${CMAKE_INSTALL_PREFIX}/var")
 ENDIF()
 
 IF ( NOT DEFINED WITH_DAEMON )
@@ -95,8 +98,7 @@ IF (WITH_DAEMON)
 	add_subdirectory(misc_utilities)
 ENDIF()
   
-
-  
+add_subdirectory(tests)
 
 add_subdirectory(openalpr)
 add_subdirectory(video)
@@ -113,6 +115,16 @@ install (FILES      ${CMAKE_CURRENT_BINARY_DIR}/config/openalpr.conf DESTINATION
 IF (WITH_DAEMON)
   install (TARGETS    alprd DESTINATION  ${CMAKE_INSTALL_PREFIX}/bin)
   install (FILES      ${CMAKE_SOURCE_DIR}/../config/alprd.conf DESTINATION    ${CMAKE_INSTALL_SYSCONFDIR}/openalpr      COMPONENT config)
+
+  install (FILES      ${CMAKE_SOURCE_DIR}/../upstart/alprd.conf DESTINATION    ${CMAKE_INSTALL_SYSCONFDIR}/init      COMPONENT config)
+
+  # Ideally, these two files should be owned by the "daemon" user, but cmake does not seem to allow that
+  # Making them world writable as a hack
+  install (FILES      ${CMAKE_SOURCE_DIR}/../upstart/alprd.log   DESTINATION    ${CMAKE_INSTALL_VARDIR}/log  
+           PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ GROUP_READ GROUP_WRITE WORLD_READ WORLD_WRITE    )
+  install (FILES      ${CMAKE_SOURCE_DIR}/../upstart/alprd.pid  DESTINATION    ${CMAKE_INSTALL_VARDIR}/run  
+           PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ GROUP_READ GROUP_WRITE WORLD_READ WORLD_WRITE    )
+
 ENDIF()
 
 
@@ -127,7 +139,7 @@ SET(CPACK_STRIP_FILES "1")
 SET (CPACK_DEBIAN_PACKAGE_PRIORITY "optional")
 SET (CPACK_DEBIAN_PACKAGE_SECTION "video")
 SET (CPACK_DEBIAN_ARCHITECTURE ${CMAKE_SYSTEM_PROCESSOR})
-SET (CPACK_DEBIAN_PACKAGE_DEPENDS "libc6 (>= 2.1.3), libgcc1 (>= 4.1.1), libtesseract3 (>= 3.0.3), libopencv-core2.4 (>= 2.4.8), libopencv-objdetect2.4 (>= 2.4.8), libopencv-highgui2.4 (>= 2.4.8), libopencv-imgproc2.4 (>= 2.4.8), libopencv-flann2.4 (>= 2.4.8), libopencv-features2d2.4 (>= 2.4.8), libzmq1, liblog4cplus-1.0-4, libcurl3, beanstalkd")
+SET (CPACK_DEBIAN_PACKAGE_DEPENDS "libc6 (>= 2.1.3), libgcc1 (>= 4.1.1), libtesseract3 (>= 3.0.3), libopencv-core2.4 (>= 2.4.8), libopencv-objdetect2.4 (>= 2.4.8), libopencv-highgui2.4 (>= 2.4.8), libopencv-imgproc2.4 (>= 2.4.8), libopencv-flann2.4 (>= 2.4.8), libopencv-features2d2.4 (>= 2.4.8), libopencv-video2.4 (>= 2.4.8), libopencv-gpu2.4 (>=2.4.8), liblog4cplus-1.0-4, libcurl3, beanstalkd")
 
 SET (CPACK_RESOURCE_FILE_LICENSE "${CMAKE_SOURCE_DIR}/../LICENSE")
 SET (CPACK_PACKAGE_DESCRIPTION "OpenALPR - Open Source Automatic License Plate Recognition")
