@@ -38,13 +38,13 @@ AlprImpl::AlprImpl(const std::string country, const std::string configFile, cons
   }
   
   plateDetector = createDetector(config);
-  stateIdentifier = new StateIdentifier(config);
+//  stateIdentifier = new StateIdentifier(config);
   ocr = new OCR(config);
   setNumThreads(0);
   
-  this->detectRegion = DEFAULT_DETECT_REGION;
+  setDetectRegion(DEFAULT_DETECT_REGION);
   this->topN = DEFAULT_TOPN;
-  this->defaultRegion = "";
+  setDefaultRegion("");
   
 }
 AlprImpl::~AlprImpl()
@@ -364,6 +364,10 @@ cJSON* AlprImpl::createJsonObj(const AlprResult* result)
 void AlprImpl::setDetectRegion(bool detectRegion)
 {
   this->detectRegion = detectRegion;
+  if (detectRegion && this->stateIdentifier == NULL)
+  {
+    this->stateIdentifier = new StateIdentifier(this->config);
+  }
 }
 void AlprImpl::setTopN(int topn)
 {
@@ -372,6 +376,11 @@ void AlprImpl::setTopN(int topn)
 void AlprImpl::setDefaultRegion(string region)
 {
   this->defaultRegion = region;
+  if (!region.empty() && this->stateIdentifier == NULL)
+  {
+    this->stateIdentifier = new StateIdentifier(this->config);
+  }
+
 }
 
 std::string AlprImpl::getVersion()
