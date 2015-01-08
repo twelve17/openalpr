@@ -22,11 +22,17 @@
 
 #include <iostream>
 #include <vector>
-#include <fstream> 
+#include <fstream>
+
+#include <opencv2/highgui/highgui.hpp>
+
+#include "config.h"
+
+using namespace cv;
 
 namespace alpr
 {
-  
+
   struct AlprPlate
   {
     std::string characters;
@@ -70,19 +76,19 @@ namespace alpr
 
       // the best plate is the topNPlate with the highest confidence
       AlprPlate bestPlate;
-      
+
       // A list of possible plate number permutations
       std::vector<AlprPlate> topNPlates;
 
       // The processing time for this plate
       float processing_time_ms;
-      
+
       // the X/Y coordinates of the corners of the plate (clock-wise from top-left)
       AlprCoordinate plate_points[4];
 
       // The index of the plate if there were multiple plates returned
       int plate_index;
-      
+
       // When region detection is enabled, this returns the region.  Region detection is experimental
       int regionConfidence;
       std::string region;
@@ -121,15 +127,20 @@ namespace alpr
       // Recognize from an image on disk
       AlprResults recognize(std::string filepath);
 
+      // Recognize from a cv::Mat
+      // AlprResults recognize(cv::Mat img, std::vector<cv::Rect> regionsOfInterest);
+
       // Recognize from byte data representing an encoded image (e.g., BMP, PNG, JPG, GIF etc).
       AlprResults recognize(std::vector<char> imageBytes);
 
-      // Recognize from raw pixel data.  
+      // Recognize from raw pixel data.
       AlprResults recognize(unsigned char* pixelData, int bytesPerPixel, int imgWidth, int imgHeight, std::vector<AlprRegionOfInterest> regionsOfInterest);
 
 
       static std::string toJson(const AlprResults results);
       static AlprResults fromJson(std::string json);
+
+      Config* config();
 
       bool isLoaded();
 

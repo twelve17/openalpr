@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 New Designs Unlimited, LLC
+ * Copyright (c) 2014 New Designs Unlimited, LLC
  * Opensource Automated License Plate Recognition [http://www.openalpr.com]
  * 
  * This file is part of OpenAlpr.
@@ -130,6 +130,7 @@ namespace alpr
 
     runtimeBaseDir = getString("common", "runtime_dir", "/usr/share/openalpr/runtime_data");
 
+    bypassDetection = getBoolean("common","bypass_detection", true);
     detection_iteration_increase = getFloat("common", "detection_iteration_increase", 1.1);
     detectionStrictness = getInt("common", "detection_strictness", 3);
     maxPlateWidthPercent = getFloat("common", "max_plate_width_percent", 100);
@@ -137,8 +138,6 @@ namespace alpr
     maxDetectionInputWidth = getInt("common", "max_detection_input_width", 1280);
     maxDetectionInputHeight = getInt("common", "max_detection_input_height", 768);
 
-    skipDetection = getBoolean("common", "skip_detection", false);
-    
     maxPlateAngleDegrees = getInt("common", "max_plate_angle_degrees", 15);
 
     minPlateSizeWidthPx = getInt(country, "min_plate_size_width_px", 100);

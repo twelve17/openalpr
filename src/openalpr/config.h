@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 New Designs Unlimited, LLC
+ * Copyright (c) 2014 New Designs Unlimited, LLC
  * Opensource Automated License Plate Recognition [http://www.openalpr.com]
  * 
  * This file is part of OpenAlpr.
@@ -47,14 +47,13 @@ namespace alpr
 
       std::string country;
 
+      bool bypassDetection;
       float detection_iteration_increase;
       int detectionStrictness;
       float maxPlateWidthPercent;
       float maxPlateHeightPercent;
       int maxDetectionInputWidth;
       int maxDetectionInputHeight;
-      
-      bool skipDetection;
 
       int maxPlateAngleDegrees;
 

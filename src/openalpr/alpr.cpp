@@ -94,5 +94,9 @@ namespace alpr
     return AlprImpl::getVersion();
   }
 
+    Config* Alpr::config() {
+        return impl->config;
+    }
+
 
 }

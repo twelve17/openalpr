@@ -1,23 +1,24 @@
 /*
- * Copyright (c) 2015 New Designs Unlimited, LLC
+ * Copyright (c) 2014 New Designs Unlimited, LLC
  * Opensource Automated License Plate Recognition [http://www.openalpr.com]
- * 
+ *
  * This file is part of OpenAlpr.
- * 
+ *
  * OpenAlpr is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License 
- * version 3 as published by the Free Software Foundation 
- * 
+ * it under the terms of the GNU Affero General Public License
+ * version 3 as published by the Free Software Foundation
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU Affero General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU Affero General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include "alpr_impl.h"
+#include "version.h"
 
 void plateAnalysisThread(void* arg);
 
@@ -68,12 +69,21 @@ namespace alpr
     return config->loaded;
   }
 
+  AlprFullDetails AlprImpl::recognizeFullDetails(cv::Mat img)
+  {
+    std::vector<cv::Rect> regionsOfInterest;
+    regionsOfInterest.push_back(cv::Rect(0, 0, img.cols, img.rows));
+
+    return this->recognizeFullDetails(img, regionsOfInterest);
+  }
 
   AlprFullDetails AlprImpl::recognizeFullDetails(cv::Mat img, std::vector<cv::Rect> regionsOfInterest)
   {
     timespec startTime;
     getTime(&startTime);
 
+    if (regionsOfInterest.size() == 0)
+      regionsOfInterest.push_back(cv::Rect(0, 0, img.cols, img.rows));
 
     AlprFullDetails response;
 
@@ -83,7 +93,7 @@ namespace alpr
 
     for (unsigned int i = 0; i < regionsOfInterest.size(); i++)
     {
-      response.results.regionsOfInterest.push_back(AlprRegionOfInterest(regionsOfInterest[i].x, regionsOfInterest[i].y, 
+      response.results.regionsOfInterest.push_back(AlprRegionOfInterest(regionsOfInterest[i].x, regionsOfInterest[i].y,
               regionsOfInterest[i].width, regionsOfInterest[i].height));
     }
 
@@ -96,14 +106,16 @@ namespace alpr
       return response;
     }
 
-    // Find all the candidate regions
-    if (config->skipDetection == false)
-    {
-      response.plateRegions = plateDetector->detect(img, regionsOfInterest);
+    if (this->config->bypassDetection) {
+        cout << "Bypassing plate region detection";
+        // Use the full image as the sole candidate region
+        PlateRegion fullRegion = PlateRegion();
+        fullRegion.rect = cv::Rect(0, 0, img.cols, img.rows);
+        response.plateRegions.push_back(fullRegion);
     }
     else
     {
-      // They have elected to skip plate detection.  Instead, return a list of plate regions 
+      // They have elected to skip plate detection.  Instead, return a list of plate regions
       // based on their regions of interest
       for (unsigned int i = 0; i < regionsOfInterest.size(); i++)
       {
@@ -117,7 +129,6 @@ namespace alpr
     for (unsigned int i = 0; i < response.plateRegions.size(); i++)
       plateQueue.push(response.plateRegions[i]);
 
-    int platecount = 0;
     while(!plateQueue.empty())
     {
       PlateRegion plateRegion = plateQueue.front();
@@ -139,7 +150,7 @@ namespace alpr
         plateResult.region = defaultRegion;
         plateResult.regionConfidence = 0;
         plateResult.plate_index = platecount++;
-        
+
         for (int pointidx = 0; pointidx < 4; pointidx++)
         {
           plateResult.plate_points[pointidx].x = (int) pipeline_data.plate_corners[pointidx].x;
@@ -227,7 +238,7 @@ namespace alpr
     {
       for (unsigned int i = 0; i < regionsOfInterest.size(); i++)
       {
-        rectangle(img, regionsOfInterest[i], Scalar(0,255,0), 2);   
+        rectangle(img, regionsOfInterest[i], Scalar(0,255,0), 2);
       }
 
       for (unsigned int i = 0; i < response.plateRegions.size(); i++)
@@ -268,10 +279,10 @@ namespace alpr
 
 
   AlprResults AlprImpl::recognize( std::vector<char> imageBytes)
-  {  
+  {
     cv::Mat img = cv::imdecode(cv::Mat(imageBytes), 1);
 
-    return this->recognize(img);
+    return this->recognize(img, this->convertRects(regionsOfInterest));
   }
 
   AlprResults AlprImpl::recognize( unsigned char* pixelData, int bytesPerPixel, int imgWidth, int imgHeight, std::vector<AlprRegionOfInterest> regionsOfInterest)
@@ -298,9 +309,10 @@ namespace alpr
 
     return this->recognize(img, regionsOfInterest);
   }
-    
+
   AlprResults AlprImpl::recognize(cv::Mat img, std::vector<cv::Rect> regionsOfInterest)
   {
+
     AlprFullDetails fullDetails = recognizeFullDetails(img, regionsOfInterest);
     return fullDetails.results;
   }
@@ -372,14 +384,14 @@ namespace alpr
   {
     cJSON *root, *coords, *candidates;
 
-    root=cJSON_CreateObject();	
+    root=cJSON_CreateObject();
 
     cJSON_AddStringToObject(root,"plate",		result->bestPlate.characters.c_str());
     cJSON_AddNumberToObject(root,"confidence",		result->bestPlate.overall_confidence);
     cJSON_AddNumberToObject(root,"matches_template",	result->bestPlate.matches_template);
 
     cJSON_AddNumberToObject(root,"plate_index",               result->plate_index);
-    
+
     cJSON_AddStringToObject(root,"region",		result->region.c_str());
     cJSON_AddNumberToObject(root,"region_confidence",	result->regionConfidence);
 
@@ -419,7 +431,7 @@ namespace alpr
     cJSON* root = cJSON_Parse(json.c_str());
 
     int version = cJSON_GetObjectItem(root, "version")->valueint;
-    allResults.epoch_time = (long) cJSON_GetObjectItem(root, "epoch_time")->valuedouble; 
+    allResults.epoch_time = (long) cJSON_GetObjectItem(root, "epoch_time")->valuedouble;
     allResults.img_width = cJSON_GetObjectItem(root, "img_width")->valueint;
     allResults.img_height = cJSON_GetObjectItem(root, "img_height")->valueint;
     allResults.total_processing_time_ms = cJSON_GetObjectItem(root, "processing_time_ms")->valueint;
@@ -447,10 +459,9 @@ namespace alpr
       cJSON* item = cJSON_GetArrayItem(resultsArray, i);
       AlprPlateResult plate;
 
-      //plate.bestPlate = cJSON_GetObjectItem(item, "plate")->valuestring; 
+      //plate.bestPlate = cJSON_GetObjectItem(item, "plate")->valuestring;
       plate.processing_time_ms = cJSON_GetObjectItem(item, "processing_time_ms")->valuedouble;
-      plate.plate_index = cJSON_GetObjectItem(item, "plate_index")->valueint;
-      plate.region = std::string(cJSON_GetObjectItem(item, "region")->valuestring);
+      plate.region = cJSON_GetObjectItem(item, "region")->valuestring;
       plate.regionConfidence = cJSON_GetObjectItem(item, "region_confidence")->valueint;
       plate.requested_topn = cJSON_GetObjectItem(item, "requested_topn")->valueint;
 
@@ -472,7 +483,7 @@ namespace alpr
       {
         cJSON* candidate = cJSON_GetArrayItem(candidates, c);
         AlprPlate plateCandidate;
-        plateCandidate.characters = std::string(cJSON_GetObjectItem(candidate, "plate")->valuestring);
+        plateCandidate.characters = cJSON_GetObjectItem(candidate, "plate")->valuestring;
         plateCandidate.overall_confidence = cJSON_GetObjectItem(candidate, "confidence")->valuedouble;
         plateCandidate.matches_template = (cJSON_GetObjectItem(candidate, "matches_template")->valueint) != 0;
 
@@ -493,7 +504,6 @@ namespace alpr
 
     return allResults;
   }
-
 
   void AlprImpl::setDetectRegion(bool detectRegion)
   {
