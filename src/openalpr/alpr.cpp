@@ -89,10 +89,14 @@ namespace alpr
     return impl->isLoaded();
   }
 
+    Config* Alpr::config()
+    {
+        return impl->config;
+    }
+
   std::string Alpr::getVersion()
   {
     return AlprImpl::getVersion();
   }
-
-
+    
 }

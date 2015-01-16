@@ -27,7 +27,6 @@
 #include <queue>
 
 #include "alpr.h"
-#include "config.h"
 
 #include "detection/detector.h"
 #include "detection/detectorfactory.h"

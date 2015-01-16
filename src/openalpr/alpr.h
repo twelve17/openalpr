@@ -22,11 +22,13 @@
 
 #include <iostream>
 #include <vector>
-#include <fstream> 
+#include <fstream>
+
+#include "config.h"
 
 namespace alpr
 {
-  
+
   struct AlprPlate
   {
     std::string characters;
@@ -70,19 +72,19 @@ namespace alpr
 
       // the best plate is the topNPlate with the highest confidence
       AlprPlate bestPlate;
-      
+
       // A list of possible plate number permutations
       std::vector<AlprPlate> topNPlates;
 
       // The processing time for this plate
       float processing_time_ms;
-      
+
       // the X/Y coordinates of the corners of the plate (clock-wise from top-left)
       AlprCoordinate plate_points[4];
 
       // The index of the plate if there were multiple plates returned
       int plate_index;
-      
+
       // When region detection is enabled, this returns the region.  Region detection is experimental
       int regionConfidence;
       std::string region;
@@ -124,7 +126,7 @@ namespace alpr
       // Recognize from byte data representing an encoded image (e.g., BMP, PNG, JPG, GIF etc).
       AlprResults recognize(std::vector<char> imageBytes);
 
-      // Recognize from raw pixel data.  
+      // Recognize from raw pixel data.
       AlprResults recognize(unsigned char* pixelData, int bytesPerPixel, int imgWidth, int imgHeight, std::vector<AlprRegionOfInterest> regionsOfInterest);
 
 
@@ -134,8 +136,10 @@ namespace alpr
       bool isLoaded();
 
       static std::string getVersion();
+      
+      Config* config();
 
-    private:
+  private:
       AlprImpl* impl;
   };
 
