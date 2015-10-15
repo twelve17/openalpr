@@ -1,6 +1,9 @@
 *~
 build/
+windows/
 scratch/
+out/
+debian_repo
 _CPack_Packages/
 /libraries/
 CMakeFiles/
@@ -25,15 +28,17 @@ openalpr_*.tar.gz
 openalpr-*.asc
 openalpr-*.sig
 openalpr-*.tar.gz
+*.orig
 
 # Visual Studio files
+src.sln
 *.vcxproj
 *.vcxproj.*
 *.suo
-*.sln
 *.sdf
 *.opensdf
 *.dir/
+*.ipch
 Debug/
 Release/
 

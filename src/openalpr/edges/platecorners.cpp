@@ -1,10 +1,10 @@
 /*
- * Copyright (c) 2014 New Designs Unlimited, LLC
- * Opensource Automated License Plate Recognition [http://www.openalpr.com]
+ * Copyright (c) 2015 OpenALPR Technology, Inc.
+ * Open source Automated License Plate Recognition [http://www.openalpr.com]
  *
- * This file is part of OpenAlpr.
+ * This file is part of OpenALPR.
  *
- * OpenAlpr is free software: you can redistribute it and/or modify
+ * OpenALPR is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License
  * version 3 as published by the Free Software Foundation
  *
@@ -53,7 +53,7 @@ namespace alpr
       cout << "PlateCorners::findPlateCorners" << endl;
 
     timespec startTime;
-    getTime(&startTime);
+    getTimeMonotonic(&startTime);
 
     int horizontalLines = this->plateLines->horizontalLines.size();
     int verticalLines = this->plateLines->verticalLines.size();
@@ -103,11 +103,16 @@ namespace alpr
 
     // Check if a left/right edge has been established.
     if (bestLeft.p1.x == 0 && bestLeft.p1.y == 0 && bestLeft.p2.x == 0 && bestLeft.p2.y == 0)
-      confidence = 0;
+    {
+      pipelineData->disqualified = true;
+      pipelineData->disqualify_reason = "platecorners did not find a left/right edge";
+    }
     else if (bestTop.p1.x == 0 && bestTop.p1.y == 0 && bestTop.p2.x == 0 && bestTop.p2.y == 0)
-      confidence = 0;
-    else
-      confidence = 100;
+    {
+      pipelineData->disqualified = true;
+      pipelineData->disqualify_reason = "platecorners did not find a top/bottom edge";
+    }
+
 
     vector<Point> corners;
     corners.push_back(bestTop.intersection(bestLeft));
@@ -118,7 +123,7 @@ namespace alpr
     if (pipelineData->config->debugTiming)
     {
       timespec endTime;
-      getTime(&endTime);
+      getTimeMonotonic(&endTime);
       cout << "Plate Corners Time: " << diffclock(startTime, endTime) << "ms." << endl;
     }
 
@@ -133,7 +138,7 @@ namespace alpr
     LineSegment right;
 
 
-    float charHeightToPlateWidthRatio = pipelineData->config->plateWidthMM / pipelineData->config->charHeightMM;
+    float charHeightToPlateWidthRatio = pipelineData->config->plateWidthMM / pipelineData->config->avgCharHeightMM;
     float idealPixelWidth = tlc.charHeight *  (charHeightToPlateWidthRatio * 1.03);	// Add 3% so we don't clip any characters
 
     float confidenceDiff = 0;
@@ -196,10 +201,17 @@ namespace alpr
     Point leftMidLinePoint = left.closestPointOnSegmentTo(tlc.centerVerticalLine.midpoint());
     Point rightMidLinePoint = right.closestPointOnSegmentTo(tlc.centerVerticalLine.midpoint());
 
-    float plateDistance = abs(idealPixelWidth - distanceBetweenPoints(leftMidLinePoint, rightMidLinePoint));
+    float actual_width = distanceBetweenPoints(leftMidLinePoint, rightMidLinePoint);
+    
+    // Disqualify the pairing if it's less than one quarter of the ideal width
+    if (actual_width < (idealPixelWidth / 4))
+      return;
+      
+    float plateDistance = abs(idealPixelWidth - actual_width);
+
     // normalize for image width
     plateDistance = plateDistance / ((float)inputImage.cols);
-
+    
     scoreKeeper.setScore("SCORING_DISTANCE_WEIGHT_VERTICAL", plateDistance, SCORING_DISTANCE_WEIGHT_VERTICAL);
 
     float score = scoreKeeper.getTotal();
@@ -230,7 +242,7 @@ namespace alpr
     LineSegment top;
     LineSegment bottom;
 
-    float charHeightToPlateHeightRatio = pipelineData->config->plateHeightMM / pipelineData->config->charHeightMM;
+    float charHeightToPlateHeightRatio = pipelineData->config->plateHeightMM / pipelineData->config->avgCharHeightMM;
     float idealPixelHeight = tlc.charHeight *  charHeightToPlateHeightRatio;
 
     float confidenceDiff = 0;
@@ -292,7 +304,7 @@ namespace alpr
     // Get the height difference
 
     float heightRatio = tlc.charHeight / plateHeightPx;
-    float idealHeightRatio = (pipelineData->config->charHeightMM / pipelineData->config->plateHeightMM);
+    float idealHeightRatio = (pipelineData->config->avgCharHeightMM / pipelineData->config->plateHeightMM);
     float heightRatioDiff = abs(heightRatio - idealHeightRatio);
 
     scoreKeeper.setScore("SCORING_PLATEHEIGHT_WEIGHT", heightRatioDiff, SCORING_PLATEHEIGHT_WEIGHT);

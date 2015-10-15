@@ -1,10 +1,10 @@
 /*
- * Copyright (c) 2014 New Designs Unlimited, LLC
- * Opensource Automated License Plate Recognition [http://www.openalpr.com]
+ * Copyright (c) 2015 OpenALPR Technology, Inc.
+ * Open source Automated License Plate Recognition [http://www.openalpr.com]
  *
- * This file is part of OpenAlpr.
+ * This file is part of OpenALPR.
  *
- * OpenAlpr is free software: you can redistribute it and/or modify
+ * OpenALPR is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License
  * version 3 as published by the Free Software Foundation
  *
@@ -39,6 +39,8 @@ namespace alpr
     return this->plateMask;
   }
 
+  // Tries to find a rectangular area surrounding most of the characters.  Not required
+  // but helpful when determining the plate edges
   void PlateMask::findOuterBoxMask( vector<TextContours > contours )
   {
     double min_parent_area = pipeline_data->config->templateHeightPx * pipeline_data->config->templateWidthPx * 0.10;	// Needs to be at least 10% of the plate area to be considered.
@@ -94,24 +96,6 @@ namespace alpr
 
     if (winningIndex != -1 && bestCharCount >= 3)
     {
-      int longestChildIndex = -1;
-      double longestChildLength = 0;
-      // Find the child with the longest permiter/arc length ( just for kicks)
-      for (unsigned int i = 0; i < contours[winningIndex].size(); i++)
-      {
-        for (unsigned int j = 0; j < contours[winningIndex].size(); j++)
-        {
-          if (contours[winningIndex].hierarchy[j][3] == winningParentId)
-          {
-            double arclength = arcLength(contours[winningIndex].contours[j], false);
-            if (arclength > longestChildLength)
-            {
-              longestChildIndex = j;
-              longestChildLength = arclength;
-            }
-          }
-        }
-      }
 
       Mat mask = Mat::zeros(pipeline_data->thresholds[winningIndex].size(), CV_8U);
 
@@ -192,13 +176,12 @@ namespace alpr
 
       hasPlateMask = true;
       this->plateMask = mask;
-    }
-
-    hasPlateMask = false;
-    Mat fullMask = Mat::zeros(pipeline_data->thresholds[0].size(), CV_8U);
-    bitwise_not(fullMask, fullMask);
-
-    this->plateMask = fullMask;
+	} else {
+	  hasPlateMask = false;
+	  Mat fullMask = Mat::zeros(pipeline_data->thresholds[0].size(), CV_8U);
+	  bitwise_not(fullMask, fullMask);
+	  this->plateMask = fullMask;
+	}
   }
 
 }

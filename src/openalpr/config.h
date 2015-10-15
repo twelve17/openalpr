@@ -1,10 +1,10 @@
 /*
- * Copyright (c) 2014 New Designs Unlimited, LLC
- * Opensource Automated License Plate Recognition [http://www.openalpr.com]
+ * Copyright (c) 2015 OpenALPR Technology, Inc.
+ * Open source Automated License Plate Recognition [http://www.openalpr.com]
  * 
- * This file is part of OpenAlpr.
+ * This file is part of OpenALPR.
  * 
- * OpenAlpr is free software: you can redistribute it and/or modify
+ * OpenALPR is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License 
  * version 3 as published by the Free Software Foundation 
  * 
@@ -22,14 +22,11 @@
 #define OPENALPR_CONFIG_H
 
 
-#include "simpleini/simpleini.h"
-#include "support/filesystem.h"
-#include "support/platform.h"
-
 #include "constants.h"
 
 #include <stdio.h>
 #include <iostream>
+#include <vector>
 #include <stdlib.h>     /* getenv */
 #include <math.h>
 
@@ -47,13 +44,22 @@ namespace alpr
 
       std::string country;
 
+      int detector;
+
       float detection_iteration_increase;
       int detectionStrictness;
       float maxPlateWidthPercent;
       float maxPlateHeightPercent;
       int maxDetectionInputWidth;
       int maxDetectionInputHeight;
+      
+      bool skipDetection;
 
+      bool auto_invert;
+      bool always_invert;
+
+      std::string prewarp;
+      
       int maxPlateAngleDegrees;
 
       float minPlateSizeWidthPx;
@@ -64,10 +70,15 @@ namespace alpr
       float plateWidthMM;
       float plateHeightMM;
 
-      float charHeightMM;
-      float charWidthMM;
+      std::vector<float> charHeightMM;
+      std::vector<float> charWidthMM;
+      
+      float avgCharHeightMM;
+      float avgCharWidthMM;
+      
       float charWhitespaceTopMM;
       float charWhitespaceBotMM;
+      float charWhitespaceBetweenLinesMM;
 
       int templateWidthPx;
       int templateHeightPx;
@@ -86,22 +97,30 @@ namespace alpr
       float plateLinesSensitivityVertical;
       float plateLinesSensitivityHorizontal;
 
+      float segmentationMinSpeckleHeightPercent;
       int segmentationMinBoxWidthPx;
       float segmentationMinCharHeightPercent;
       float segmentationMaxCharWidthvsAverage;
 
+      std::string detectorFile;
+      
       std::string ocrLanguage;
       int ocrMinFontSize;
 
+      bool mustMatchPattern;
+      
       float postProcessMinConfidence;
       float postProcessConfidenceSkipLevel;
-      unsigned int postProcessMaxSubstitutions;
       unsigned int postProcessMinCharacters;
       unsigned int postProcessMaxCharacters;
 
+      std::string postProcessRegexLetters;
+      std::string postProcessRegexNumbers;
 
       bool debugGeneral;
       bool debugTiming;
+      bool debugPrewarp;
+      bool debugDetector;
       bool debugStateId;
       bool debugPlateLines;
       bool debugPlateCorners;
@@ -113,24 +132,38 @@ namespace alpr
       bool debugShowImages;
       bool debugPauseOnFrame;
 
-      void debugOff();
+      void setDebug(bool value);
 
       std::string getKeypointsRuntimeDir();
       std::string getCascadeRuntimeDir();
       std::string getPostProcessRuntimeDir();
       std::string getTessdataPrefix();
 
-  private:
-      CSimpleIniA* ini;
-
       std::string runtimeBaseDir;
 
-      void loadValues(std::string country);
+      std::vector<std::string> loaded_countries;
 
-      int getInt(std::string section, std::string key, int defaultValue);
-      float getFloat(std::string section, std::string key, float defaultValue);
-      std::string getString(std::string section, std::string key, std::string defaultValue);
-      bool getBoolean(std::string section, std::string key, bool defaultValue);
+      bool setCountry(std::string country);
+
+    private:
+    
+      float ocrImagePercent;
+      float stateIdImagePercent;
+
+      std::vector<std::string> parse_country_string(std::string countries);
+
+      void loadCommonValues(std::string configFile);
+      void loadCountryValues(std::string configFile, std::string country);
+
+  };
+
+
+  enum DETECTOR_TYPE
+  {
+    DETECTOR_LBP_CPU=0,
+    DETECTOR_LBP_GPU=1,
+    DETECTOR_MORPH_CPU=2,
+    DETECTOR_LBP_OPENCL=3
   };
 
 }

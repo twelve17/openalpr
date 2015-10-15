@@ -26,7 +26,7 @@ using namespace alpr;
 // prototypes
 void streamRecognitionThread(void* arg);
 bool writeToQueue(std::string jsonResult);
-bool uploadPost(std::string url, std::string data);
+bool uploadPost(CURL* curl, std::string url, std::string data);
 void dataUploadThread(void* arg);
 
 // Constants
@@ -41,6 +41,7 @@ const std::string BEANSTALK_TUBE_NAME="alprd";
 
 struct CaptureThreadData
 {
+  std::string company_id;
   std::string stream_url;
   std::string site_id;
   int camera_id;
@@ -201,6 +202,7 @@ int main( int argc, const char** argv )
   std::string imageFolder = ini.GetValue("daemon", "store_plates_location", "/tmp/");
   bool uploadData = ini.GetBoolValue("daemon", "upload_data", false);
   std::string upload_url = ini.GetValue("daemon", "upload_address", "");
+  std::string company_id = ini.GetValue("daemon", "company_id", "");
   std::string site_id = ini.GetValue("daemon", "site_id", "");
   
   LOG4CPLUS_INFO(logger, "Using: " << daemonConfigFile << " for daemon configuration");
@@ -221,6 +223,7 @@ int main( int argc, const char** argv )
       tdata->output_images = storePlates;
       tdata->output_image_folder = imageFolder;
       tdata->country_code = country;
+      tdata->company_id = company_id;
       tdata->site_id = site_id;
       tdata->top_n = topn;
       tdata->clock_on = clockOn;
@@ -283,7 +286,7 @@ void streamRecognitionThread(void* arg)
     {
       
       timespec startTime;
-      getTime(&startTime);
+      getTimeMonotonic(&startTime);
       
       std::vector<AlprRegionOfInterest> regionsOfInterest;
       regionsOfInterest.push_back(AlprRegionOfInterest(0,0, latestFrame.cols, latestFrame.rows));
@@ -291,7 +294,7 @@ void streamRecognitionThread(void* arg)
       AlprResults results = alpr.recognize(latestFrame.data, latestFrame.elemSize(), latestFrame.cols, latestFrame.rows, regionsOfInterest);
       
       timespec endTime;
-      getTime(&endTime);
+      getTimeMonotonic(&endTime);
       double totalProcessingTime = diffclock(startTime, endTime);
       
       if (tdata->clock_on)
@@ -301,10 +304,9 @@ void streamRecognitionThread(void* arg)
       
       if (results.plates.size() > 0)
       {
-        long epoch_time = getEpochTime();
         
         std::stringstream uuid_ss;
-        uuid_ss << tdata->site_id << "-cam" << tdata->camera_id << "-" << epoch_time;
+        uuid_ss << tdata->site_id << "-cam" << tdata->camera_id << "-" << getEpochTimeMs();
 	std::string uuid = uuid_ss.str();
         
 	// Save the image to disk (using the UUID)
@@ -326,6 +328,10 @@ void streamRecognitionThread(void* arg)
 	cJSON_AddStringToObject(root, 	"site_id", 	tdata->site_id.c_str());
 	cJSON_AddNumberToObject(root,	"img_width",	latestFrame.cols);
 	cJSON_AddNumberToObject(root,	"img_height",	latestFrame.rows);
+
+        // Add the company ID to the output if configured
+        if (tdata->company_id.length() > 0)
+          cJSON_AddStringToObject(root, 	"company_id", 	tdata->company_id.c_str());
 
 	char *out;
 	out=cJSON_PrintUnformatted(root);
@@ -387,6 +393,8 @@ bool writeToQueue(std::string jsonResult)
 
 void dataUploadThread(void* arg)
 {
+  CURL *curl;
+
   
   /* In windows, this will init the winsock stuff */ 
   curl_global_init(CURL_GLOBAL_ALL);
@@ -401,6 +409,8 @@ void dataUploadThread(void* arg)
   {
     try
     {
+      /* get a curl handle */ 
+      curl = curl_easy_init();
       Beanstalk::Client client(BEANSTALK_QUEUE_HOST, BEANSTALK_PORT);
       
       client.watch(BEANSTALK_TUBE_NAME);
@@ -414,24 +424,26 @@ void dataUploadThread(void* arg)
 	if (job.id() > 0)
 	{
 	  //LOG4CPLUS_DEBUG(logger, job.body() );
-	  if (uploadPost(udata->upload_url, job.body()))
+	  if (uploadPost(curl, udata->upload_url, job.body()))
 	  {
 	    client.del(job.id());
 	    LOG4CPLUS_INFO(logger, "Job: " << job.id() << " successfully uploaded" );
 	    // Wait 10ms
-	    usleep(10000);
+	    sleep_ms(10);
 	  }
 	  else
 	  {
 	    client.release(job);
 	    LOG4CPLUS_WARN(logger, "Job: " << job.id() << " failed to upload.  Will retry." );
 	    // Wait 2 seconds
-	    usleep(2000000);
+	    sleep_ms(2000);
 	  }
 	}
 	
       }
       
+      /* always cleanup */ 
+      curl_easy_cleanup(curl);
     }
     catch (const std::runtime_error& error)
     {
@@ -445,16 +457,21 @@ void dataUploadThread(void* arg)
 }
 
 
-bool uploadPost(std::string url, std::string data)
+bool uploadPost(CURL* curl, std::string url, std::string data)
 {
   bool success = true;
-  CURL *curl;
   CURLcode res;
+  struct curl_slist *headers=NULL; // init to NULL is important
+
+  /* Add the required headers */ 
+  headers = curl_slist_append(headers,  "Accept: application/json");
+  headers = curl_slist_append( headers, "Content-Type: application/json");
+  headers = curl_slist_append( headers, "charsets: utf-8");
  
- 
-  /* get a curl handle */ 
-  curl = curl_easy_init();
   if(curl) {
+	/* Add the headers */
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+   
     /* First set the URL that is about to receive our POST. This URL can
        just as well be a https:// URL if that is what should receive the
        data. */ 
@@ -472,8 +489,6 @@ bool uploadPost(std::string url, std::string data)
       success = false;
     }
  
-    /* always cleanup */ 
-    curl_easy_cleanup(curl);
   }
   
   return success;

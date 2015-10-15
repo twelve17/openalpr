@@ -1,10 +1,10 @@
 /*
- * Copyright (c) 2014 New Designs Unlimited, LLC
- * Opensource Automated License Plate Recognition [http://www.openalpr.com]
+ * Copyright (c) 2015 OpenALPR Technology, Inc.
+ * Open source Automated License Plate Recognition [http://www.openalpr.com]
  *
- * This file is part of OpenAlpr.
+ * This file is part of OpenALPR.
  *
- * OpenAlpr is free software: you can redistribute it and/or modify
+ * OpenALPR is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License
  * version 3 as published by the Free Software Foundation
  *
@@ -55,6 +55,7 @@ namespace alpr
       bool isPointBelowLine(cv::Point tp);
 
       float getPointAt(float x);
+      float getXPointAt(float y);
 
       cv::Point closestPointOnSegmentTo(cv::Point p);
 
@@ -80,6 +81,7 @@ namespace alpr
   cv::Mat drawImageDashboard(std::vector<cv::Mat> images, int imageType, unsigned int numColumns);
 
   void displayImage(Config* config, std::string windowName, cv::Mat frame);
+  void drawAndWait(cv::Mat frame);
   void drawAndWait(cv::Mat* frame);
 
   double distanceBetweenPoints(cv::Point p1, cv::Point p2);
@@ -101,12 +103,16 @@ namespace alpr
 
   cv::Mat addLabel(cv::Mat input, std::string label);
 
-
+  int levenshteinDistance (const std::string &s1, const std::string &s2, int max);
   std::string toString(int value);
+  std::string toString(long value);
   std::string toString(unsigned int value);
   std::string toString(float value);
   std::string toString(double value);
 
+  std::string &ltrim(std::string &s);
+  std::string &rtrim(std::string &s);
+  std::string &trim(std::string &s);
 }
 
 #endif // OPENALPR_UTILITY_H

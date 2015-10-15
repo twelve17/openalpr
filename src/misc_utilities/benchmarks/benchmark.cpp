@@ -1,10 +1,10 @@
 /*
- * Copyright (c) 2014 New Designs Unlimited, LLC
- * Opensource Automated License Plate Recognition [http://www.openalpr.com]
+ * Copyright (c) 2015 OpenALPR Technology, Inc.
+ * Open source Automated License Plate Recognition [http://www.openalpr.com]
  *
- * This file is part of OpenAlpr.
+ * This file is part of OpenALPR.
  *
- * OpenAlpr is free software: you can redistribute it and/or modify
+ * OpenALPR is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License
  * version 3 as published by the Free Software Foundation
  *
@@ -88,55 +88,41 @@ int main( int argc, const char** argv )
   if (benchmarkName.compare("segocr") == 0)
   {
     Config* config = new Config(country);
-    config->debugOff();
+    config->setDebug(false);
+    config->skipDetection = true;
 
-    OCR* ocr = new OCR(config);
-
+    AlprImpl alpr(country);
+    alpr.config = config;
+    
     for (int i = 0; i< files.size(); i++)
     {
       if (hasEnding(files[i], ".png") || hasEnding(files[i], ".jpg"))
       {
         string fullpath = inDir + "/" + files[i];
 
-        frame = imread( fullpath.c_str() );
-        resize(frame, frame, Size(config->ocrImageWidthPx, config->ocrImageHeightPx));
-
-        Rect plateCoords;
-        plateCoords.x = 0;
-        plateCoords.y = 0;
-        plateCoords.width = frame.cols;
-        plateCoords.height = frame.rows;
-	
-	PipelineData pipeline_data(frame, plateCoords, config);
-
+        frame = cv::imread(fullpath.c_str());
+        
+        cv::Rect roi;
+        roi.x = 0;
+        roi.y = 0;
+        roi.width = frame.cols;
+        roi.height = frame.rows;
+        vector<Rect> rois;
+        rois.push_back(roi);
+        AlprResults results = alpr.recognize(frame, rois);
+        
         char statecode[3];
         statecode[0] = files[i][0];
         statecode[1] = files[i][1];
         statecode[2] = '\0';
         string statecodestr(statecode);
-
-        CharacterAnalysis charRegion(&pipeline_data);
-
-        if (pipeline_data.textLines.size() > 0 &&
-            abs(pipeline_data.textLines[0].angle) > 4)
-        {
-          // Rotate image:
-          Mat rotated(frame.size(), frame.type());
-          Mat rot_mat( 2, 3, CV_32FC1 );
-          Point center = Point( frame.cols/2, frame.rows/2 );
-
-          rot_mat = getRotationMatrix2D( center, pipeline_data.textLines[0].angle, 1.0 );
-          warpAffine( frame, rotated, rot_mat, frame.size() );
-
-          rotated.copyTo(frame);
-	  pipeline_data.crop_gray = frame;
-        }
-
-        CharacterSegmenter charSegmenter(&pipeline_data);
-        ocr->performOCR(&pipeline_data);
-        ocr->postProcessor.analyze(statecode, 25);
-
-        cout << files[i] << "," << statecode << "," << ocr->postProcessor.bestChars << endl;
+                
+        if (results.plates.size() == 1)
+          cout << files[i] << "," << statecode << "," << results.plates[0].bestPlate.characters << endl;
+        else if (results.plates.size() == 0)
+          cout << files[i] << "," << statecode << "," << endl;
+        else if (results.plates.size() > 1)
+          cout << files[i] << "," << statecode << ",???+" << endl;
 
         imshow("Current LP", frame);
         waitKey(5);
@@ -144,7 +130,6 @@ int main( int argc, const char** argv )
     }
 
     delete config;
-    delete ocr;
   }
   else if (benchmarkName.compare("detection") == 0)
   {
@@ -175,14 +160,14 @@ int main( int argc, const char** argv )
     timespec endTime;
 
     Config config(country);
-    config.debugOff();
+    config.setDebug(false);
 
     AlprImpl alpr(country);
-    alpr.config->debugOff();
+    alpr.config->setDebug(false);
     alpr.setDetectRegion(true);
 
     Detector* plateDetector = createDetector(&config);
-    StateIdentifier stateIdentifier(&config);
+    StateDetector stateDetector(country, config.runtimeBaseDir);
     OCR ocr(&config);
 
     vector<double> endToEndTimes;
@@ -202,18 +187,18 @@ int main( int argc, const char** argv )
         string fullpath = inDir + "/" + files[i];
         frame = imread( fullpath.c_str() );
 
-        getTime(&startTime);
+        getTimeMonotonic(&startTime);
         vector<Rect> regionsOfInterest;
         regionsOfInterest.push_back(Rect(0, 0, frame.cols, frame.rows));
         alpr.recognize(frame, regionsOfInterest);
-        getTime(&endTime);
+        getTimeMonotonic(&endTime);
         double endToEndTime = diffclock(startTime, endTime);
         cout << " -- End to End recognition time: " << endToEndTime << "ms." << endl;
         endToEndTimes.push_back(endToEndTime);
 
-        getTime(&startTime);
+        getTimeMonotonic(&startTime);
         vector<PlateRegion> regions = plateDetector->detect(frame);
-        getTime(&endTime);
+        getTimeMonotonic(&endTime);
 
         double regionDetectionTime = diffclock(startTime, endTime);
         cout << " -- Region detection time: " << regionDetectionTime << "ms." << endl;
@@ -224,35 +209,35 @@ int main( int argc, const char** argv )
 	  
 	  PipelineData pipeline_data(frame, regions[z].rect, &config);
 	  
-          getTime(&startTime);
-	  
-          stateIdentifier.recognize(&pipeline_data);
-          getTime(&endTime);
+          getTimeMonotonic(&startTime);
+
+          //stateDetector.detect(&pipeline_data);
+          getTimeMonotonic(&endTime);
           double stateidTime = diffclock(startTime, endTime);
           cout << "\tRegion " << z << ": State ID time: " << stateidTime << "ms." << endl;
           stateIdTimes.push_back(stateidTime);
 
-          getTime(&startTime);
+          getTimeMonotonic(&startTime);
           LicensePlateCandidate lp(&pipeline_data);
           lp.recognize();
-          getTime(&endTime);
+          getTimeMonotonic(&endTime);
           double analysisTime = diffclock(startTime, endTime);
           cout << "\tRegion " << z << ": Analysis time: " << analysisTime << "ms." << endl;
 
-          if (pipeline_data.plate_area_confidence > 10)
+          if (!pipeline_data.disqualified)
           {
             lpAnalysisPositiveTimes.push_back(analysisTime);
 
-            getTime(&startTime);
+            getTimeMonotonic(&startTime);
             ocr.performOCR(&pipeline_data);
-            getTime(&endTime);
+            getTimeMonotonic(&endTime);
             double ocrTime = diffclock(startTime, endTime);
             cout << "\tRegion " << z << ": OCR time: " << ocrTime << "ms." << endl;
             ocrTimes.push_back(ocrTime);
 
-            getTime(&startTime);
+            getTimeMonotonic(&startTime);
             ocr.postProcessor.analyze("", 25);
-            getTime(&endTime);
+            getTimeMonotonic(&endTime);
             double postProcessTime = diffclock(startTime, endTime);
             cout << "\tRegion " << z << ": PostProcess time: " << postProcessTime << "ms." << endl;
             postProcessTimes.push_back(postProcessTime);

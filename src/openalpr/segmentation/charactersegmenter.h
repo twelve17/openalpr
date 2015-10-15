@@ -1,10 +1,10 @@
 /*
- * Copyright (c) 2014 New Designs Unlimited, LLC
- * Opensource Automated License Plate Recognition [http://www.openalpr.com]
+ * Copyright (c) 2015 OpenALPR Technology, Inc.
+ * Open source Automated License Plate Recognition [http://www.openalpr.com]
  *
- * This file is part of OpenAlpr.
+ * This file is part of OpenALPR.
  *
- * OpenAlpr is free software: you can redistribute it and/or modify
+ * OpenALPR is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License
  * version 3 as published by the Free Software Foundation
  *
@@ -24,7 +24,7 @@
 #include "constants.h"
 #include "binarize_wolf.h"
 #include "utility.h"
-#include "verticalhistogram.h"
+#include "histogramvertical.h"
 #include "config.h"
 #include "textdetection/textcontours.h"
 #include "pipeline_data.h"
@@ -66,22 +66,24 @@ namespace alpr
 
       void removeSmallContours(std::vector<cv::Mat> thresholds, float avgCharHeight, TextLine textLine);
 
-      std::vector<cv::Rect> getHistogramBoxes(VerticalHistogram histogram, float avgCharWidth, float avgCharHeight, float* score);
+      std::vector<cv::Rect> getHistogramBoxes(HistogramVertical histogram, float avgCharWidth, float avgCharHeight, float* score);
       std::vector<cv::Rect> getBestCharBoxes(cv::Mat img, std::vector<cv::Rect> charBoxes, float avgCharWidth);
-      std::vector<cv::Rect> combineCloseBoxes( std::vector<cv::Rect> charBoxes, float avgCharWidth);
+      
+      int getCharGap(cv::Rect leftBox, cv::Rect rightBox);
+      std::vector<cv::Rect> combineCloseBoxes( std::vector<cv::Rect> charBoxes);
 
       std::vector<cv::Rect> get1DHits(cv::Mat img, int yOffset);
 
       void cleanCharRegions(std::vector<cv::Mat> thresholds, std::vector<cv::Rect> charRegions);
       void cleanBasedOnColor(std::vector<cv::Mat> thresholds, cv::Mat colorMask, std::vector<cv::Rect> charRegions);
-      void cleanMostlyFullBoxes(std::vector<cv::Mat> thresholds, const std::vector<cv::Rect> charRegions);
       std::vector<cv::Rect> filterMostlyEmptyBoxes(std::vector<cv::Mat> thresholds, const  std::vector<cv::Rect> charRegions);
-      void filterEdgeBoxes(std::vector<cv::Mat> thresholds, const std::vector<cv::Rect> charRegions, float avgCharWidth, float avgCharHeight);
+      cv::Mat filterEdgeBoxes(std::vector<cv::Mat> thresholds, const std::vector<cv::Rect> charRegions, float avgCharWidth, float avgCharHeight);
 
       int getLongestBlobLengthBetweenLines(cv::Mat img, int col);
 
       int isSkinnyLineInsideBox(cv::Mat threshold, cv::Rect box, std::vector<std::vector<cv::Point> > contours, std::vector<cv::Vec4i> hierarchy, float avgCharWidth, float avgCharHeight);
 
+      std::vector<cv::Rect> convert1DHitsToRect(std::vector<std::pair<int, int> >  hits, LineSegment top, LineSegment bottom);
   };
 
 }

@@ -1,10 +1,10 @@
 /*
- * Copyright (c) 2014 New Designs Unlimited, LLC
- * Opensource Automated License Plate Recognition [http://www.openalpr.com]
+ * Copyright (c) 2015 OpenALPR Technology, Inc.
+ * Open source Automated License Plate Recognition [http://www.openalpr.com]
  *
- * This file is part of OpenAlpr.
+ * This file is part of OpenALPR.
  *
- * OpenAlpr is free software: you can redistribute it and/or modify
+ * OpenALPR is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License
  * version 3 as published by the Free Software Foundation
  *
@@ -23,23 +23,33 @@
 #include <iostream>
 #include <vector>
 #include <fstream> 
+#include <stdint.h>
 
 namespace alpr
 {
+  
+  struct AlprCoordinate
+  {
+    int x;
+    int y;
+  };
+  
+  struct AlprChar
+  {
+    AlprCoordinate corners[4];
+    float confidence;
+    std::string character;
+  };
   
   struct AlprPlate
   {
     std::string characters;
     float overall_confidence;
 
+    std::vector<AlprChar> character_details;
     bool matches_template;
   };
-
-  struct AlprCoordinate
-  {
-    int x;
-    int y;
-  };
+  
 
   class AlprRegionOfInterest
   {
@@ -65,14 +75,25 @@ namespace alpr
       AlprPlateResult() {};
       virtual ~AlprPlateResult() {};
 
+      // The number requested is always >= the topNPlates count
       int requested_topn;
 
+      // the best plate is the topNPlate with the highest confidence
       AlprPlate bestPlate;
+      
+      // A list of possible plate number permutations
       std::vector<AlprPlate> topNPlates;
 
+      // The processing time for this plate
       float processing_time_ms;
+      
+      // the X/Y coordinates of the corners of the plate (clock-wise from top-left)
       AlprCoordinate plate_points[4];
 
+      // The index of the plate if there were multiple plates returned
+      int plate_index;
+      
+      // When region detection is enabled, this returns the region.  Region detection is experimental
       int regionConfidence;
       std::string region;
   };
@@ -83,7 +104,7 @@ namespace alpr
       AlprResults() {};
       virtual ~AlprResults() {};
 
-      long epoch_time;
+      int64_t epoch_time;
       int img_width;
       int img_height;
       float total_processing_time_ms;
@@ -95,6 +116,7 @@ namespace alpr
   };
 
 
+  class Config;
   class AlprImpl;
   class Alpr
   {
@@ -110,8 +132,11 @@ namespace alpr
       // Recognize from an image on disk
       AlprResults recognize(std::string filepath);
 
-      // Recognize from byte data representing an encoded image (e.g., BMP, PNG, JPG, GIF etc).
-      AlprResults recognize(std::vector<char> imageBytes);
+	  // Recognize from byte data representing an encoded image (e.g., BMP, PNG, JPG, GIF etc).
+	  AlprResults recognize(std::vector<char> imageBytes);
+
+	  // Recognize from byte data representing an encoded image (e.g., BMP, PNG, JPG, GIF etc).
+	  AlprResults recognize(std::vector<char> imageBytes, std::vector<AlprRegionOfInterest> regionsOfInterest);
 
       // Recognize from raw pixel data.  
       AlprResults recognize(unsigned char* pixelData, int bytesPerPixel, int imgWidth, int imgHeight, std::vector<AlprRegionOfInterest> regionsOfInterest);
@@ -123,6 +148,8 @@ namespace alpr
       bool isLoaded();
 
       static std::string getVersion();
+
+      Config* getConfig();
 
     private:
       AlprImpl* impl;

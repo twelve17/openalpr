@@ -26,14 +26,41 @@ TEST_CASE( "LineSegment Test", "[2d primitives]" ) {
   REQUIRE( flat_horizontal.midpoint().x == 11 );
   REQUIRE( flat_horizontal.getPointAt(11) == 1 );
   
+  LineSegment rising_45(1,1, 5,5);
+  
+  REQUIRE( rising_45.getPointAt(3) == 3 );
+  REQUIRE( rising_45.getXPointAt(3) == 3 );
+  
   // Test distance between points calculation
   REQUIRE( distanceBetweenPoints(Point(10,10), Point(20,20)) == Approx(14.1421) );
   REQUIRE( distanceBetweenPoints(Point(-5,10), Point(20,-12)) == Approx(33.3017) );
   
   int testarray1[] = {1, 2, 3, 3, 4, 5 };
   int testarray2[] = {0, 2, -3, 3, -4, 5 };
-  int testarray3[] = { };
+  int *testarray3;
   REQUIRE( median(testarray1, 6) == 3 );
   REQUIRE( median(testarray2, 6) == 1 );
   REQUIRE( median(testarray3, 0) == 0 );
+}
+
+TEST_CASE( "Test Levenshtein Distance", "[levenshtein]" ) {
+  
+  // Test the maximum works correctly
+  REQUIRE( levenshteinDistance("asdf", "bbbb", 10) == 4 );
+  REQUIRE( levenshteinDistance("asdf", "bbbb", 4) == 4 );
+  REQUIRE( levenshteinDistance("asdf", "bbbb", 3) == 3 );
+  REQUIRE( levenshteinDistance("asdf", "bbbb", 2) == 2 );
+  REQUIRE( levenshteinDistance("asdf", "bbbb", 1) == 1 );
+  REQUIRE( levenshteinDistance("asdf", "bbbb", 0) == 0 );
+  
+  // Test some substitutions
+  REQUIRE( levenshteinDistance("P32RX", "PE32RX", 10) == 1 );
+  REQUIRE( levenshteinDistance("P32RX", "PE32RX", 2) == 1 );
+  REQUIRE( levenshteinDistance("ASDF11", "ASDF1", 10) == 1 );
+  REQUIRE( levenshteinDistance("1ASDF1", "ASDF1", 10) == 1 );
+  REQUIRE( levenshteinDistance("ASD", "ASDF1", 2) == 2 );
+  REQUIRE( levenshteinDistance("11111", "11I11", 2) == 1 );
+  
+  REQUIRE( levenshteinDistance("", "AAAA", 2) == 2 );
+  REQUIRE( levenshteinDistance("BA", "AAAA", 2) == 2 );
 }

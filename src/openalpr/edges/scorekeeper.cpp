@@ -1,10 +1,10 @@
 /*
- * Copyright (c) 2014 New Designs Unlimited, LLC
- * Opensource Automated License Plate Recognition [http://www.openalpr.com]
+ * Copyright (c) 2015 OpenALPR Technology, Inc.
+ * Open source Automated License Plate Recognition [http://www.openalpr.com]
  *
- * This file is part of OpenAlpr.
+ * This file is part of OpenALPR.
  *
- * OpenAlpr is free software: you can redistribute it and/or modify
+ * OpenALPR is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License
  * version 3 as published by the Free Software Foundation
  *
@@ -51,6 +51,12 @@ namespace alpr
 
     return score;
   }
+  
+  
+  int ScoreKeeper::size() {
+    return weight_ids.size();
+  }
+
 
   void ScoreKeeper::printDebugScores() {
 
@@ -63,18 +69,19 @@ namespace alpr
 
     float total = getTotal();
 
+    std::cout << "--------------------" << std::endl;
+    std::cout << "Total: " << total << std::endl;
     for (unsigned int i = 0; i < weight_ids.size(); i++)
     {
       float percent_of_total = (scores[i] * weights[i]) / total * 100;
 
-      std::cout << " - " << std::setw(longest_weight_id + 1) << std::left << weight_ids[i] << 
+      std::cout << "   - " << std::setw(longest_weight_id + 1) << std::left << weight_ids[i] << 
               " Weighted Score: " << std::setw(10) << std::left << (scores[i] * weights[i]) << 
               " Orig Score: " << std::setw(10) << std::left << scores[i] << 
               " (" << percent_of_total << "% of total)" << std::endl;
     }
 
-
-    std::cout << "Total: " << total << std::endl;
+    std::cout << "--------------------" << std::endl;
   }
   
 }

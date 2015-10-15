@@ -1,10 +1,10 @@
 /*
- * Copyright (c) 2014 New Designs Unlimited, LLC
- * Opensource Automated License Plate Recognition [http://www.openalpr.com]
+ * Copyright (c) 2015 OpenALPR Technology, Inc.
+ * Open source Automated License Plate Recognition [http://www.openalpr.com]
  *
- * This file is part of OpenAlpr.
+ * This file is part of OpenALPR.
  *
- * OpenAlpr is free software: you can redistribute it and/or modify
+ * OpenALPR is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License
  * version 3 as published by the Free Software Foundation
  *
@@ -28,6 +28,7 @@
 #include <ctype.h>
 
 #include "support/filesystem.h"
+#include "config.h"
 
 
 
@@ -42,6 +43,17 @@ const int BACKSPACE_KEY = 8;
 const int DOWN_ARROW_KEY = 1;
 const int UP_ARROW_KEY= 0;
 
+#elif WINDOWS
+// https://msdn.microsoft.com/en-us/library/windows/desktop/dd375731(v=vs.85).aspx
+const int LEFT_ARROW_KEY = 37; // VK_LEFT
+const int RIGHT_ARROW_KEY = 39; // VK_RIGHT
+const int SPACE_KEY = 32; // VK_SPACE
+const int ENTER_KEY = 13; // VK_RETURN
+const int ESCAPE_KEY = 27; // VK_ESCAPE 
+const int BACKSPACE_KEY = 8; // VK_BACK
+
+const int DOWN_ARROW_KEY = 40; // VK_DOWN
+const int UP_ARROW_KEY= 38; // VK_UP
 #else
 const int LEFT_ARROW_KEY = 81;
 const int RIGHT_ARROW_KEY = 83;
@@ -65,7 +77,7 @@ static int xPos1 = 0;
 static int yPos1 = 0;
 static int xPos2 = 0;
 static int yPos2 = 0;
-const float ASPECT_RATIO = 1.404;
+float ASPECT_RATIO = 1.404;
 
 static bool rdragging = false;
 static int rDragStartX = 0;
@@ -157,6 +169,9 @@ int main( int argc, const char** argv )
     return 0;
   }
 
+  Config config(country);
+  ASPECT_RATIO = config.plateWidthMM / config.plateHeightMM;
+  
   vector<string> files = getFilesInDir(inDir.c_str());
   
   vector<string> imgFiles;

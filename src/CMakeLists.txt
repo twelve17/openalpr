@@ -5,7 +5,7 @@ cmake_minimum_required (VERSION 2.6)
 
 # Set the OpenALPR version in cmake, and also add it as a DEFINE for the code to access
 SET(OPENALPR_MAJOR_VERSION "2")
-SET(OPENALPR_MINOR_VERSION "0")
+SET(OPENALPR_MINOR_VERSION "1")
 SET(OPENALPR_PATCH_VERSION "0")
 SET(OPENALPR_VERSION ${OPENALPR_MAJOR_VERSION}.${OPENALPR_MINOR_VERSION}.${OPENALPR_PATCH_VERSION})
 
@@ -17,7 +17,7 @@ SET(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake_modules/")
 
 # TODO: switch to http://www.cmake.org/cmake/help/v2.8.5/cmake.html#module:GNUInstallDirs ?
 IF (NOT CMAKE_INSTALL_SYSCONFDIR) 
-  SET(CMAKE_INSTALL_SYSCONFDIR "${CMAKE_INSTALL_PREFIX}/etc")
+  SET(CMAKE_INSTALL_SYSCONFDIR "/etc")
 ENDIF()
 IF (NOT CMAKE_INSTALL_VARDIR) 
   SET(CMAKE_INSTALL_VARDIR "${CMAKE_INSTALL_PREFIX}/var")
@@ -25,6 +25,26 @@ ENDIF()
 
 IF ( NOT DEFINED WITH_DAEMON )
   SET(WITH_DAEMON ON)
+ENDIF()
+
+if ( NOT DEFINED WITH_GPU_DETECTOR )
+  SET(WITH_GPU_DETECTOR OFF)
+ENDIF()
+
+if ( NOT DEFINED WITH_TESTS )
+  SET(WITH_TESTS ON)
+ENDIF()
+
+if ( NOT DEFINED WITH_BINDING_JAVA )
+  SET(WITH_BINDING_JAVA ON)
+ENDIF()
+
+if ( NOT DEFINED WITH_BINDING_PYTHON )
+  SET(WITH_BINDING_PYTHON ON)
+ENDIF()
+
+if ( NOT DEFINED WITH_UTILITIES )
+  SET(WITH_UTILITIES ON)
 ENDIF()
 
 IF (WIN32 AND WITH_DAEMON) 
@@ -39,13 +59,18 @@ include_directories(${Tesseract_INCLUDE_DIRS})
 # Discover OpenCV directory automatically
 find_path(OpenCV_DIR
   NAMES OpenCVConfig.cmake
-  HINTS ${CMAKE_SOURCE_DIR}/../libraries/opencv/)
-		
+  HINTS ${CMAKE_SOURCE_DIR}/../libraries/opencv/
+)
 # Opencv Package
 FIND_PACKAGE( OpenCV REQUIRED )
 IF (${OpenCV_VERSION} VERSION_LESS 2.4.7)
 	MESSAGE(FATAL_ERROR "OpenCV version is not compatible : ${OpenCV_VERSION}")
 ENDIF()
+
+include_directories(${OpenCV_INCLUDE_DIRS})
+
+add_definitions( -DOPENCV_MAJOR_VERSION=${OpenCV_VERSION_MAJOR})
+
 
 include_directories(./openalpr )
 
@@ -70,13 +95,20 @@ ENDIF()
 set(CMAKE_CSS_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Wall ")
 ADD_EXECUTABLE( alpr  main.cpp )
 
+if (WIN32) 
+   SET(OPENALPR_LIB openalpr-static)
+ELSE()
+   SET(OPENALPR_LIB openalpr)
+ENDIF()
+
 TARGET_LINK_LIBRARIES(alpr
-	openalpr-static
+	${OPENALPR_LIB}
+	statedetection
 	support
     video
 	${OpenCV_LIBS}
 	${Tesseract_LIBRARIES}
-        ${Extra_LIBS}
+    ${Extra_LIBS}
   )
 
 # Compile the alprd library on Unix-based OS
@@ -91,18 +123,30 @@ IF (WITH_DAEMON)
 	  log4cplus
 	  ${OpenCV_LIBS}
 	  ${Tesseract_LIBRARIES}
-          ${Extra_LIBS}
+      ${Extra_LIBS}
     )
 	
-	# Don't include misc utilities for Windows
-	add_subdirectory(misc_utilities)
 ENDIF()
-  
+
+if(WITH_UTILITIES)
+add_subdirectory(misc_utilities)
+ENDIF()
+
+if (WITH_TESTS)  
 add_subdirectory(tests)
+ENDIF()
 
 add_subdirectory(openalpr)
+add_subdirectory(statedetection)
 add_subdirectory(video)
 
+if (WITH_BINDING_JAVA) 
+add_subdirectory(bindings/java)
+ENDIF()
+
+if (WITH_BINDING_PYTHON)
+add_subdirectory(bindings/python)
+ENDIF()
 
 install (TARGETS    alpr DESTINATION   ${CMAKE_INSTALL_PREFIX}/bin)
 install (FILES      ${CMAKE_SOURCE_DIR}/../doc/man/alpr.1 DESTINATION       ${CMAKE_INSTALL_PREFIX}/share/man/man1 COMPONENT doc)
@@ -115,27 +159,17 @@ install (FILES      ${CMAKE_CURRENT_BINARY_DIR}/config/openalpr.conf DESTINATION
 IF (WITH_DAEMON)
   install (TARGETS    alprd DESTINATION  ${CMAKE_INSTALL_PREFIX}/bin)
   install (FILES      ${CMAKE_SOURCE_DIR}/../config/alprd.conf DESTINATION    ${CMAKE_INSTALL_SYSCONFDIR}/openalpr      COMPONENT config)
-
-  install (FILES      ${CMAKE_SOURCE_DIR}/../upstart/alprd.conf DESTINATION    ${CMAKE_INSTALL_SYSCONFDIR}/init      COMPONENT config)
-
-  # Ideally, these two files should be owned by the "daemon" user, but cmake does not seem to allow that
-  # Making them world writable as a hack
-  install (FILES      ${CMAKE_SOURCE_DIR}/../upstart/alprd.log   DESTINATION    ${CMAKE_INSTALL_VARDIR}/log  
-           PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ GROUP_READ GROUP_WRITE WORLD_READ WORLD_WRITE    )
-  install (FILES      ${CMAKE_SOURCE_DIR}/../upstart/alprd.pid  DESTINATION    ${CMAKE_INSTALL_VARDIR}/run  
-           PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ GROUP_READ GROUP_WRITE WORLD_READ WORLD_WRITE    )
-
 ENDIF()
 
 
-SET(CPACK_PACKAGE_VERSION ${OPENALPR_VERSION})
+SET (CPACK_PACKAGE_VERSION ${OPENALPR_VERSION})
 SET (CPACK_SET_DESTDIR "on")
 SET (CPACK_GENERATOR "DEB;TGZ")
 SET (CPACK_PACKAGE_NAME "openalpr")
-SET(CPACK_INSTALL_CMAKE_PROJECTS "${CMAKE_SOURCE_DIR}/build;src;ALL;/")
-SET(CPACK_CMAKE_GENERATOR "Unix Makefiles")
+SET (CPACK_INSTALL_CMAKE_PROJECTS "${CMAKE_SOURCE_DIR}/build;src;ALL;/")
+SET (CPACK_CMAKE_GENERATOR "Unix Makefiles")
 
-SET(CPACK_STRIP_FILES "1")
+SET (CPACK_STRIP_FILES "1")
 SET (CPACK_DEBIAN_PACKAGE_PRIORITY "optional")
 SET (CPACK_DEBIAN_PACKAGE_SECTION "video")
 SET (CPACK_DEBIAN_ARCHITECTURE ${CMAKE_SYSTEM_PROCESSOR})

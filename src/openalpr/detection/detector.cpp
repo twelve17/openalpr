@@ -1,10 +1,10 @@
 /*
- * Copyright (c) 2014 New Designs Unlimited, LLC
- * Opensource Automated License Plate Recognition [http://www.openalpr.com]
+ * Copyright (c) 2015 OpenALPR Technology, Inc.
+ * Open source Automated License Plate Recognition [http://www.openalpr.com]
  *
- * This file is part of OpenAlpr.
+ * This file is part of OpenALPR.
  *
- * OpenAlpr is free software: you can redistribute it and/or modify
+ * OpenALPR is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License
  * version 3 as published by the Free Software Foundation
  *
@@ -28,7 +28,6 @@ namespace alpr
   Detector::Detector(Config* config)
   {
     this->config = config;
-    this->scale_factor = 1.0f;
 
   }
 
@@ -55,7 +54,39 @@ namespace alpr
     std::vector<PlateRegion> rois;
     return rois;
   }
+  
+  std::string Detector::get_detector_file() {
+    if (config->detectorFile.length() == 0)
+      return config->getCascadeRuntimeDir() + config->country + ".xml";
+    
+    return config->getCascadeRuntimeDir() + config->detectorFile;
+  }
 
+
+  float Detector::computeScaleFactor(int width, int height) {
+    
+    float scale_factor = 1.0;
+    
+    if (width > config->maxDetectionInputWidth)
+    {
+      // The frame is too wide
+      scale_factor = ((float) config->maxDetectionInputWidth) / ((float) width);
+
+      if (config->debugDetector)
+        std::cout << "Input detection image is too wide.  Resizing with scale: " << scale_factor << endl;
+    }
+    else if (height > config->maxDetectionInputHeight)
+    {
+      // The frame is too tall
+      scale_factor = ((float) config->maxDetectionInputHeight) / ((float) height);
+
+      if (config->debugDetector)
+        std::cout << "Input detection image is too tall.  Resizing with scale: " << scale_factor << endl;
+    }
+    
+    return scale_factor;
+    
+  }
 
   bool rectHasLargerArea(cv::Rect a, cv::Rect b) { return a.area() < b.area(); };
 

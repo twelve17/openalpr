@@ -1,10 +1,10 @@
 /*
- * Copyright (c) 2014 New Designs Unlimited, LLC
- * Opensource Automated License Plate Recognition [http://www.openalpr.com]
+ * Copyright (c) 2015 OpenALPR Technology, Inc.
+ * Open source Automated License Plate Recognition [http://www.openalpr.com]
  *
- * This file is part of OpenAlpr.
+ * This file is part of OpenALPR.
  *
- * OpenAlpr is free software: you can redistribute it and/or modify
+ * OpenALPR is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License
  * version 3 as published by the Free Software Foundation
  *
@@ -35,8 +35,6 @@ namespace alpr
     this->pipeline_data = pipeline_data;
     this->config = pipeline_data->config;
 
-    this->confidence = 0;
-
     if (this->config->debugCharAnalysis)
       cout << "Starting CharacterAnalysis identification" << endl;
 
@@ -50,13 +48,17 @@ namespace alpr
 
   void CharacterAnalysis::analyze()
   {
+    timespec startTime;
+    getTimeMonotonic(&startTime);
+
+    if (config->always_invert)
+      bitwise_not(pipeline_data->crop_gray, pipeline_data->crop_gray);
+
     pipeline_data->clearThresholds();
     pipeline_data->thresholds = produceThresholds(pipeline_data->crop_gray, config);
 
-
-
-    timespec startTime;
-    getTime(&startTime);
+    timespec contoursStartTime;
+    getTimeMonotonic(&contoursStartTime);
 
     pipeline_data->textLines.clear();
 
@@ -69,13 +71,14 @@ namespace alpr
 
     if (config->debugTiming)
     {
-      timespec endTime;
-      getTime(&endTime);
-      cout << "  -- Character Analysis Find Contours Time: " << diffclock(startTime, endTime) << "ms." << endl;
+      timespec contoursEndTime;
+      getTimeMonotonic(&contoursEndTime);
+      cout << "  -- Character Analysis Find Contours Time: " << diffclock(contoursStartTime, contoursEndTime) << "ms." << endl;
     }
     //Mat img_equalized = equalizeBrightness(img_gray);
 
-    getTime(&startTime);
+    timespec filterStartTime;
+    getTimeMonotonic(&filterStartTime);
 
     for (unsigned int i = 0; i < pipeline_data->thresholds.size(); i++)
     {
@@ -87,9 +90,9 @@ namespace alpr
 
     if (config->debugTiming)
     {
-      timespec endTime;
-      getTime(&endTime);
-      cout << "  -- Character Analysis Filter Time: " << diffclock(startTime, endTime) << "ms." << endl;
+      timespec filterEndTime;
+      getTimeMonotonic(&filterEndTime);
+      cout << "  -- Character Analysis Filter Time: " << diffclock(filterStartTime, filterEndTime) << "ms." << endl;
     }
 
     PlateMask plateMask(pipeline_data);
@@ -127,7 +130,11 @@ namespace alpr
       cout << "Best fit score: " << bestFitScore << " Index: " << bestFitIndex << endl;
 
     if (bestFitScore <= 1)
+    {
+      pipeline_data->disqualified = true;
+      pipeline_data->disqualify_reason = "Low best fit score in characteranalysis";
       return;
+    }
 
     //getColorMask(img, allContours, allHierarchy, charSegments);
 
@@ -138,6 +145,22 @@ namespace alpr
       displayImage(config, "Matching Contours", img_contours);
     }
 
+    if (config->auto_invert)
+      pipeline_data->plate_inverted = isPlateInverted();
+    else
+      pipeline_data->plate_inverted = config->always_invert;
+
+    if (config->debugGeneral)
+      cout << "Plate inverted: " << pipeline_data->plate_inverted << endl;
+    
+    // Invert multiline plates and redo the thresholds before finding the second line
+    if (config->multiline && config->auto_invert && pipeline_data->plate_inverted)
+    {
+      bitwise_not(pipeline_data->crop_gray, pipeline_data->crop_gray);
+      pipeline_data->thresholds = produceThresholds(pipeline_data->crop_gray, pipeline_data->config);
+    }
+      
+    
     LineFinder lf(pipeline_data);
     vector<vector<Point> > linePolygons = lf.findLines(pipeline_data->crop_gray, bestContours);
 
@@ -151,7 +174,7 @@ namespace alpr
 
       vector<Point> textArea = getCharArea(topLine, bottomLine);
 
-      TextLine textLine(textArea, linePolygon);
+      TextLine textLine(textArea, linePolygon, pipeline_data->crop_gray.size());
 
       tempTextLines.push_back(textLine);
     }
@@ -168,12 +191,10 @@ namespace alpr
       vector<Point> linePolygon = tempTextLines[i].linePolygon;
       if (updatedTextArea.size() > 0 && linePolygon.size() > 0)
       {
-        pipeline_data->textLines.push_back(TextLine(updatedTextArea, linePolygon));
+        pipeline_data->textLines.push_back(TextLine(updatedTextArea, linePolygon, pipeline_data->crop_gray.size()));
       }
 
     }
-
-    pipeline_data->plate_inverted = isPlateInverted();
 
 
     if (pipeline_data->textLines.size() > 0)
@@ -194,19 +215,33 @@ namespace alpr
 
       // If a multiline plate has only one line, disqualify
       if (pipeline_data->isMultiline && pipeline_data->textLines.size() < 2)
+      {
+        if (config->debugCharAnalysis)
+          std::cout << "Did not detect multiple lines on multi-line plate" << std::endl;
         confidenceDrainers += 95;
+      }
 
-      if (confidenceDrainers >= 100)
-        this->confidence=1;
+      if (confidenceDrainers >= 90)
+      {
+        pipeline_data->disqualified = true;
+        pipeline_data->disqualify_reason = "Low confidence in characteranalysis";
+      }
       else
-        this->confidence = 100 - confidenceDrainers;
+      {
+        float confidence = 100 - confidenceDrainers;
+        pipeline_data->confidence_weights.setScore("CHARACTER_ANALYSIS_SCORE", confidence, 1.0);
+      }
     }
-
+    else
+    {
+        pipeline_data->disqualified = true;
+        pipeline_data->disqualify_reason = "No text lines found in characteranalysis";
+    }
 
     if (config->debugTiming)
     {
       timespec endTime;
-      getTime(&endTime);
+      getTimeMonotonic(&endTime);
       cout << "Character Analysis Time: " << diffclock(startTime, endTime) << "ms." << endl;
     }
 
@@ -268,15 +303,15 @@ namespace alpr
 
   void CharacterAnalysis::filter(Mat img, TextContours& textContours)
   {
-    static int STARTING_MIN_HEIGHT = round (((float) img.rows) * config->charAnalysisMinPercent);
-    static int STARTING_MAX_HEIGHT = round (((float) img.rows) * (config->charAnalysisMinPercent + config->charAnalysisHeightRange));
-    static int HEIGHT_STEP = round (((float) img.rows) * config->charAnalysisHeightStepSize);
-    static int NUM_STEPS = config->charAnalysisNumSteps;
+    int STARTING_MIN_HEIGHT = round (((float) img.rows) * config->charAnalysisMinPercent);
+    int STARTING_MAX_HEIGHT = round (((float) img.rows) * (config->charAnalysisMinPercent + config->charAnalysisHeightRange));
+    int HEIGHT_STEP = round (((float) img.rows) * config->charAnalysisHeightStepSize);
+    int NUM_STEPS = config->charAnalysisNumSteps;
 
     int bestFitScore = -1;
 
     vector<bool> bestIndices;
-
+     
     for (int i = 0; i < NUM_STEPS; i++)
     {
 
@@ -311,7 +346,19 @@ namespace alpr
   // Goes through the contours for the plate and picks out possible char segments based on min/max height
   void CharacterAnalysis::filterByBoxSize(TextContours& textContours, int minHeightPx, int maxHeightPx)
   {
-    float idealAspect=config->charWidthMM / config->charHeightMM;
+    // For multiline plates, we want to target the biggest line for character analysis, since it should be easier to spot.
+    float larger_char_height_mm = 0;
+    float larger_char_width_mm = 0;
+    for (unsigned int i = 0; i < config->charHeightMM.size(); i++)
+    {
+      if (config->charHeightMM[i] > larger_char_height_mm)
+      {
+        larger_char_height_mm = config->charHeightMM[i];
+        larger_char_width_mm = config->charWidthMM[i];
+      }
+    }
+    
+    float idealAspect=larger_char_width_mm / larger_char_height_mm;
     float aspecttolerance=0.25;
 
 
@@ -545,7 +592,8 @@ namespace alpr
 
       totalChars++;
 
-      drawContours(tempFullContour, textContours.contours, i, Scalar(255,255,255), CV_FILLED, 8, textContours.hierarchy);
+	  tempFullContour = Mat::zeros(plateMask.size(), CV_8U);
+	  drawContours(tempFullContour, textContours.contours, i, Scalar(255,255,255), CV_FILLED, 8, textContours.hierarchy);
       bitwise_and(tempFullContour, plateMask, tempMaskedContour);
 
       float beforeMaskWhiteness = mean(tempFullContour)[0];
@@ -591,31 +639,6 @@ namespace alpr
     return false;
   }
 
-  bool CharacterAnalysis::verifySize(Mat r, float minHeightPx, float maxHeightPx)
-  {
-    //Char sizes 45x90
-    float aspect=config->charWidthMM / config->charHeightMM;
-    float charAspect= (float)r.cols/(float)r.rows;
-    float error=0.35;
-    //float minHeight=TEMPLATE_PLATE_HEIGHT * .35;
-    //float maxHeight=TEMPLATE_PLATE_HEIGHT * .65;
-    //We have a different aspect ratio for number 1, and it can be ~0.2
-    float minAspect=0.2;
-    float maxAspect=aspect+aspect*error;
-    //area of pixels
-    float area=countNonZero(r);
-    //bb area
-    float bbArea=r.cols*r.rows;
-    //% of pixel in area
-    float percPixels=area/bbArea;
-
-    //if(DEBUG)
-    //cout << "Aspect: "<< aspect << " ["<< minAspect << "," << maxAspect << "] "  << "Area "<< percPixels <<" Char aspect " << charAspect  << " Height char "<< r.rows << "\n";
-    if(percPixels < 0.8 && charAspect > minAspect && charAspect < maxAspect && r.rows >= minHeightPx && r.rows < maxHeightPx)
-      return true;
-    else
-      return false;
-  }
 
   vector<Point> CharacterAnalysis::getCharArea(LineSegment topLine, LineSegment bottomLine)
   {

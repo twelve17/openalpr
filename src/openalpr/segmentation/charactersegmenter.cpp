@@ -1,10 +1,10 @@
 /*
- * Copyright (c) 2014 New Designs Unlimited, LLC
- * Opensource Automated License Plate Recognition [http://www.openalpr.com]
+ * Copyright (c) 2015 OpenALPR Technology, Inc.
+ * Open source Automated License Plate Recognition [http://www.openalpr.com]
  *
- * This file is part of OpenAlpr.
+ * This file is part of OpenALPR.
  *
- * OpenAlpr is free software: you can redistribute it and/or modify
+ * OpenALPR is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License
  * version 3 as published by the Free Software Foundation
  *
@@ -40,7 +40,7 @@ namespace alpr
     //CharacterRegion charRegion(img, debug);
 
     timespec startTime;
-    getTime(&startTime);
+    getTimeMonotonic(&startTime);
 
     if (pipeline_data->plate_inverted)
       bitwise_not(pipeline_data->crop_gray, pipeline_data->crop_gray);
@@ -53,48 +53,14 @@ namespace alpr
     if (this->config->debugCharSegmenter)
       cout << "Segmenter: inverted: " << pipeline_data->plate_inverted << endl;
 
-    if (pipeline_data->plate_inverted)
-      bitwise_not(pipeline_data->crop_gray, pipeline_data->crop_gray);
-
 
     if (this->config->debugCharSegmenter)
     {
       displayImage(config, "CharacterSegmenter  Thresholds", drawImageDashboard(pipeline_data->thresholds, CV_8U, 3));
     }
 
-  //  if (this->config->debugCharSegmenter && pipeline_data->textLines.size() > 0)
-  //  {
-  //    Mat img_contours(charAnalysis->bestThreshold.size(), CV_8U);
-  //    charAnalysis->bestThreshold.copyTo(img_contours);
-  //    cvtColor(img_contours, img_contours, CV_GRAY2RGB);
-  //
-  //    vector<vector<Point> > allowedContours;
-  //    for (unsigned int i = 0; i < charAnalysis->bestContours.size(); i++)
-  //    {
-  //      if (charAnalysis->bestContours.goodIndices[i])
-  //        allowedContours.push_back(charAnalysis->bestContours.contours[i]);
-  //    }
-  //
-  //    drawContours(img_contours, charAnalysis->bestContours.contours,
-  //                 -1, // draw all contours
-  //                 cv::Scalar(255,0,0), // in blue
-  //                 1); // with a thickness of 1
-  //
-  //    drawContours(img_contours, allowedContours,
-  //                 -1, // draw all contours
-  //                 cv::Scalar(0,255,0), // in green
-  //                 1); // with a thickness of 1
-  //
-  //
-  //    line(img_contours, pipeline_data->textLines[0].linePolygon[0], pipeline_data->textLines[0].linePolygon[1], Scalar(255, 0, 255), 1);
-  //    line(img_contours, pipeline_data->textLines[0].linePolygon[3], pipeline_data->textLines[0].linePolygon[2], Scalar(255, 0, 255), 1);
-  //
-  //
-  //    Mat bordered = addLabel(img_contours, "Best Contours");
-  //    imgDbgGeneral.push_back(bordered);
-  //  }
-
-
+    Mat edge_filter_mask = Mat::zeros(pipeline_data->thresholds[0].size(), CV_8U);
+    bitwise_not(edge_filter_mask, edge_filter_mask);
 
     for (unsigned int lineidx = 0; lineidx < pipeline_data->textLines.size(); lineidx++)
     {
@@ -102,15 +68,22 @@ namespace alpr
       this->bottom = pipeline_data->textLines[lineidx].bottomLine;
 
       float avgCharHeight = pipeline_data->textLines[lineidx].lineHeight;
-      float height_to_width_ratio = pipeline_data->config->charHeightMM / pipeline_data->config->charWidthMM;
+      float height_to_width_ratio = pipeline_data->config->charHeightMM[lineidx] / pipeline_data->config->charWidthMM[lineidx];
       float avgCharWidth = avgCharHeight / height_to_width_ratio;
 
+      if (config->debugCharSegmenter)
+      {
+        cout << "LINE " << lineidx << ": avgCharHeight: " << avgCharHeight << " - height_to_width_ratio: " << height_to_width_ratio << endl;
+        cout << "LINE " << lineidx << ": avgCharWidth: " << avgCharWidth << endl;
+      }
+      
+      
       removeSmallContours(pipeline_data->thresholds, avgCharHeight, pipeline_data->textLines[lineidx]);
 
       // Do the histogram analysis to figure out char regions
 
       timespec startTime;
-      getTime(&startTime);
+      getTimeMonotonic(&startTime);
 
       vector<Mat> allHistograms;
 
@@ -121,56 +94,48 @@ namespace alpr
 
         fillConvexPoly(histogramMask, pipeline_data->textLines[lineidx].linePolygon.data(), pipeline_data->textLines[lineidx].linePolygon.size(), Scalar(255,255,255));
 
-        VerticalHistogram vertHistogram(pipeline_data->thresholds[i], histogramMask);
+        HistogramVertical vertHistogram(pipeline_data->thresholds[i], histogramMask);
 
-        if (this->config->debugCharSegmenter)
-        {
-          Mat histoCopy(vertHistogram.histoImg.size(), vertHistogram.histoImg.type());
-          //vertHistogram.copyTo(histoCopy);
-          cvtColor(vertHistogram.histoImg, histoCopy, CV_GRAY2RGB);
+//        if (this->config->debugCharSegmenter)
+//        {
+//          Mat histoCopy(vertHistogram.histoImg.size(), vertHistogram.histoImg.type());
+//          //vertHistogram.copyTo(histoCopy);
+//          cvtColor(vertHistogram.histoImg, histoCopy, CV_GRAY2RGB);
+//
+//          string label = "threshold: " + toString(i);
+//          allHistograms.push_back(addLabel(histoCopy, label));
+//          
+//          std::cout << histoCopy.cols << " x " << histoCopy.rows << std::endl;
+//        }
 
-          string label = "threshold: " + toString(i);
-          allHistograms.push_back(addLabel(histoCopy, label));
-        }
-
-  //
         float score = 0;
         vector<Rect> charBoxes = getHistogramBoxes(vertHistogram, avgCharWidth, avgCharHeight, &score);
 
-        if (this->config->debugCharSegmenter)
-        {
-          for (unsigned int cboxIdx = 0; cboxIdx < charBoxes.size(); cboxIdx++)
-          {
-            rectangle(allHistograms[i], charBoxes[cboxIdx], Scalar(0, 255, 0));
-          }
-
-          Mat histDashboard = drawImageDashboard(allHistograms, allHistograms[0].type(), 1);
-          displayImage(config, "Char seg histograms", histDashboard);
-        }
+//        if (this->config->debugCharSegmenter)
+//        {
+//          for (unsigned int cboxIdx = 0; cboxIdx < charBoxes.size(); cboxIdx++)
+//          {
+//            rectangle(allHistograms[i], charBoxes[cboxIdx], Scalar(0, 255, 0));
+//          }
+//
+//          Mat histDashboard = drawImageDashboard(allHistograms, allHistograms[0].type(), 1);
+//          displayImage(config, "Char seg histograms", histDashboard);
+//        }
 
         for (unsigned int z = 0; z < charBoxes.size(); z++)
           lineBoxes.push_back(charBoxes[z]);
         //drawAndWait(&histogramMask);
       }
 
-      float medianCharWidth = avgCharWidth;
-      vector<int> widthValues;
-      // Compute largest char width
-      for (unsigned int i = 0; i < lineBoxes.size(); i++)
-      {
-        widthValues.push_back(lineBoxes[i].width);
-      }
-
-      medianCharWidth = median(widthValues.data(), widthValues.size());
 
       if (config->debugTiming)
       {
         timespec endTime;
-        getTime(&endTime);
+        getTimeMonotonic(&endTime);
         cout << "  -- Character Segmentation Create and Score Histograms Time: " << diffclock(startTime, endTime) << "ms." << endl;
       }
 
-      vector<Rect> candidateBoxes = getBestCharBoxes(pipeline_data->thresholds[0], lineBoxes, medianCharWidth);
+      vector<Rect> candidateBoxes = getBestCharBoxes(pipeline_data->thresholds[0], lineBoxes, avgCharWidth);
 
       if (this->config->debugCharSegmenter)
       {
@@ -189,22 +154,23 @@ namespace alpr
         }
       }
 
-      getTime(&startTime);
+      getTimeMonotonic(&startTime);
 
-      filterEdgeBoxes(pipeline_data->thresholds, candidateBoxes, medianCharWidth, avgCharHeight);
+      Mat edge_mask = filterEdgeBoxes(pipeline_data->thresholds, candidateBoxes, avgCharWidth, avgCharHeight);
+      bitwise_and(edge_filter_mask, edge_mask, edge_filter_mask);
+      
+      candidateBoxes = combineCloseBoxes(candidateBoxes);
+
       candidateBoxes = filterMostlyEmptyBoxes(pipeline_data->thresholds, candidateBoxes);
-      candidateBoxes = combineCloseBoxes(candidateBoxes, medianCharWidth);
-      cleanMostlyFullBoxes(pipeline_data->thresholds, candidateBoxes);
 
-      candidateBoxes = filterMostlyEmptyBoxes(pipeline_data->thresholds, candidateBoxes);
-
-      for (unsigned int cbox = 0; cbox < candidateBoxes.size(); cbox++)
-        pipeline_data->charRegions.push_back(candidateBoxes[cbox]);
+      pipeline_data->charRegions.push_back(candidateBoxes);
+      for (unsigned int cboxidx = 0; cboxidx < candidateBoxes.size(); cboxidx++)
+        pipeline_data->charRegionsFlat.push_back(candidateBoxes[cboxidx]);
 
       if (config->debugTiming)
       {
         timespec endTime;
-        getTime(&endTime);
+        getTimeMonotonic(&endTime);
         cout << "  -- Character Segmentation Box cleaning/filtering Time: " << diffclock(startTime, endTime) << "ms." << endl;
       }
 
@@ -220,13 +186,25 @@ namespace alpr
         displayImage(config, "Segmentation Clean Filters", cleanImgDash);
       }
     }
+    
+    // Apply the edge mask (left and right ends) after all lines have been processed.
+    for (unsigned int i = 0; i < pipeline_data->thresholds.size(); i++)
+    {
+      bitwise_and(pipeline_data->thresholds[i], edge_filter_mask, pipeline_data->thresholds[i]);
+    }
 
-    cleanCharRegions(pipeline_data->thresholds, pipeline_data->charRegions);
+    vector<Rect> all_regions_combined;
+    for (unsigned int lidx = 0; lidx < pipeline_data->charRegions.size(); lidx++)
+    {
+      for (unsigned int boxidx = 0; boxidx < pipeline_data->charRegions[lidx].size(); boxidx++)
+        all_regions_combined.push_back(pipeline_data->charRegions[lidx][boxidx]);
+    }
+    cleanCharRegions(pipeline_data->thresholds, all_regions_combined);
 
     if (config->debugTiming)
     {
       timespec endTime;
-      getTime(&endTime);
+      getTimeMonotonic(&endTime);
       cout << "Character Segmenter Time: " << diffclock(startTime, endTime) << "ms." << endl;
     }
   }
@@ -238,7 +216,7 @@ namespace alpr
 
   // Given a histogram and the horizontal line boundaries, respond with an array of boxes where the characters are
   // Scores the histogram quality as well based on num chars, char volume, and even separation
-  vector<Rect> CharacterSegmenter::getHistogramBoxes(VerticalHistogram histogram, float avgCharWidth, float avgCharHeight, float* score)
+  vector<Rect> CharacterSegmenter::getHistogramBoxes(HistogramVertical histogram, float avgCharWidth, float avgCharHeight, float* score)
   {
     float MIN_HISTOGRAM_HEIGHT = avgCharHeight * config->segmentationMinCharHeightPercent;
 
@@ -249,7 +227,7 @@ namespace alpr
     int pxLeniency = 2;
 
     vector<Rect> charBoxes;
-    vector<Rect> allBoxes = get1DHits(histogram.histoImg, pxLeniency);
+    vector<Rect> allBoxes = convert1DHitsToRect(histogram.get1DHits(pxLeniency), top, bottom);
 
     for (unsigned int i = 0; i < allBoxes.size(); i++)
     {
@@ -294,7 +272,7 @@ namespace alpr
 
   vector<Rect> CharacterSegmenter::getBestCharBoxes(Mat img, vector<Rect> charBoxes, float avgCharWidth)
   {
-    float MAX_SEGMENT_WIDTH = avgCharWidth * 1.65;
+    float MAX_SEGMENT_WIDTH = avgCharWidth * config->segmentationMaxCharWidthvsAverage;
 
     // This histogram is based on how many char boxes (from ALL of the many thresholded images) are covering each column
     // Makes a sort of histogram from all the previous char boxes.  Figures out the best fit from that.
@@ -318,7 +296,7 @@ namespace alpr
         histoImg.at<uchar>(histoImg.rows -  columnCount, col) = 255;
     }
 
-    VerticalHistogram histogram(histoImg, Mat::ones(histoImg.size(), CV_8U));
+    HistogramVertical histogram(histoImg, Mat::ones(histoImg.size(), CV_8U));
 
     // Go through each row in the histoImg and score it.  Try to find the single line that gives me the most right-sized character regions (based on avgCharWidth)
 
@@ -329,7 +307,9 @@ namespace alpr
     for (int row = 0; row < histoImg.rows; row++)
     {
       vector<Rect> validBoxes;
-      vector<Rect> allBoxes = get1DHits(histoImg, row);
+      
+      int pxLeniency = 0;
+      vector<Rect> allBoxes = convert1DHitsToRect(histogram.get1DHits(pxLeniency), top, bottom);
 
       if (this->config->debugCharSegmenter)
         cout << "All Boxes size " << allBoxes.size() << endl;
@@ -408,41 +388,11 @@ namespace alpr
     return bestBoxes;
   }
 
-  vector<Rect> CharacterSegmenter::get1DHits(Mat img, int yOffset)
-  {
-    vector<Rect> hits;
-
-    bool onSegment = false;
-    int curSegmentLength = 0;
-    for (int col = 0; col < img.cols; col++)
-    {
-      bool isOn = img.at<uchar>(img.rows - 1 - yOffset, col);
-      if (isOn)
-      {
-        // We're on a segment.  Increment the length
-        onSegment = true;
-        curSegmentLength++;
-      }
-
-      if (onSegment && (isOn == false || (col == img.cols - 1)))
-      {
-        // A segment just ended or we're at the very end of the row and we're on a segment
-        Point topLeft = Point(col - curSegmentLength, top.getPointAt(col - curSegmentLength) - 1);
-        Point botRight = Point(col, bottom.getPointAt(col) + 1);
-        hits.push_back(Rect(topLeft, botRight));
-
-        onSegment = false;
-        curSegmentLength = 0;
-      }
-    }
-
-    return hits;
-  }
 
   void CharacterSegmenter::removeSmallContours(vector<Mat> thresholds, float avgCharHeight,  TextLine textLine)
   {
     //const float MIN_CHAR_AREA = 0.02 * avgCharWidth * avgCharHeight;	// To clear out the tiny specks
-    const float MIN_CONTOUR_HEIGHT = 0.3 * avgCharHeight;
+    const float MIN_CONTOUR_HEIGHT = config->segmentationMinSpeckleHeightPercent * avgCharHeight;
 
     Mat textLineMask = Mat::zeros(thresholds[0].size(), CV_8U);
     fillConvexPoly(textLineMask, textLine.linePolygon.data(), textLine.linePolygon.size(), Scalar(255,255,255));
@@ -471,9 +421,45 @@ namespace alpr
       }
     }
   }
+  int CharacterSegmenter::getCharGap(cv::Rect leftBox, cv::Rect rightBox) {
+      int right_midpoint = (rightBox.x + (rightBox.width / 2));
+      int left_midpoint = (leftBox.x + (leftBox.width / 2));
+      return  right_midpoint - left_midpoint;
+  }
 
-  vector<Rect> CharacterSegmenter::combineCloseBoxes( vector<Rect> charBoxes, float biggestCharWidth)
+  vector<Rect> CharacterSegmenter::combineCloseBoxes( vector<Rect> charBoxes)
   {
+    // Don't bother combining if there are 2 or fewer characters
+    if (charBoxes.size() <= 2)
+      return charBoxes;
+    
+    // First find the median char gap (the space from midpoint to midpoint of chars)
+    
+    vector<int> char_gaps;
+    for (unsigned int i = 0; i < charBoxes.size(); i++)
+    {
+      if (i == charBoxes.size() - 1)
+        break;
+      
+      // the space between charbox i and i+1
+      char_gaps.push_back(getCharGap(charBoxes[i], charBoxes[i+1]));
+    }
+        
+    int median_char_gap = median(char_gaps.data(), char_gaps.size());
+    
+    
+    // Find the second largest char box.  Should help ignore a big outlier
+    vector<int> char_sizes;
+    float biggestCharWidth;
+    for (unsigned int i = 0; i < charBoxes.size(); i++)
+    {
+      char_sizes.push_back(charBoxes[i].width);
+    }
+
+    std::sort(char_sizes.begin(), char_sizes.end());
+    biggestCharWidth = char_sizes[char_sizes.size() - 2];
+    
+    
     vector<Rect> newCharBoxes;
 
     for (unsigned int i = 0; i < charBoxes.size(); i++)
@@ -485,12 +471,26 @@ namespace alpr
       }
       float bigWidth = (charBoxes[i + 1].x + charBoxes[i + 1].width - charBoxes[i].x);
 
-      float w1Diff = abs(charBoxes[i].width - biggestCharWidth);
-      float w2Diff = abs(charBoxes[i + 1].width - biggestCharWidth);
-      float bigDiff = abs(bigWidth - biggestCharWidth);
-      bigDiff *= 1.3;	// Make it a little harder to merge boxes.
+      float left_gap;
+      float right_gap;
+      
+      if (i == 0)
+        left_gap = 999999999999;
+      else
+        left_gap = getCharGap(charBoxes[i-1], charBoxes[i]);
+      
+      right_gap = getCharGap(charBoxes[i], charBoxes[i+1]);
+      
+      int min_gap = (int) ((float)median_char_gap) * 0.75;
+      int max_gap = (int) ((float)median_char_gap) * 1.25;
+      
+      int max_width = (int) ((float)biggestCharWidth) * 1.2;
+      
+      bool has_good_gap = (left_gap >= min_gap && left_gap <= max_gap) || (right_gap >= min_gap && right_gap <= max_gap);
+      
 
-      if (bigDiff < w1Diff && bigDiff < w2Diff)
+      
+      if (has_good_gap && bigWidth <= max_width)
       {
         Rect bigRect(charBoxes[i].x, charBoxes[i].y, bigWidth, charBoxes[i].height);
         newCharBoxes.push_back(bigRect);
@@ -510,6 +510,11 @@ namespace alpr
       else
       {
         newCharBoxes.push_back(charBoxes[i]);
+        if (this->config->debugCharSegmenter)
+        {
+          cout << "Not Merging 2 boxes -- " << i << " and " << i + 1 << " -- has_good_gap: " << has_good_gap <<
+                  " bigWidth (" << bigWidth << ") > max_width ("  << max_width << ")" << endl;
+        }
       }
     }
 
@@ -609,9 +614,10 @@ namespace alpr
         }
       }
 
-      Mat closureElement = getStructuringElement( 1,
-                           Size( 2 + 1, 2+1 ),
-                           Point( 1, 1 ) );
+      int morph_size = 1;
+      Mat closureElement = getStructuringElement( 2, // 0 Rect, 1 cross, 2 ellipse
+                           Size( 2 * morph_size + 1, 2* morph_size + 1 ),
+                           Point( morph_size, morph_size ) );
 
       //morphologyEx(thresholds[i], thresholds[i], MORPH_OPEN, element);
 
@@ -681,31 +687,6 @@ namespace alpr
     }
   }
 
-  void CharacterSegmenter::cleanMostlyFullBoxes(vector<Mat> thresholds, const vector<Rect> charRegions)
-  {
-    float MAX_FILLED = 0.95 * 255;
-
-    for (unsigned int i = 0; i < charRegions.size(); i++)
-    {
-      Mat mask = Mat::zeros(thresholds[0].size(), CV_8U);
-      rectangle(mask, charRegions[i], Scalar(255,255,255), -1);
-
-      for (unsigned int j = 0; j < thresholds.size(); j++)
-      {
-        if (mean(thresholds[j], mask)[0] > MAX_FILLED)
-        {
-          // Empty the rect
-          rectangle(thresholds[j], charRegions[i], Scalar(0,0,0), -1);
-
-          if (this->config->debugCharSegmenter)
-          {
-            Rect inset(charRegions[i].x + 2, charRegions[i].y - 2, charRegions[i].width - 4, charRegions[i].height - 4);
-            rectangle(imgDbgCleanStages[j], inset, COLOR_DEBUG_FULLBOX, 1);
-          }
-        }
-      }
-    }
-  }
 
   vector<Rect> CharacterSegmenter::filterMostlyEmptyBoxes(vector<Mat> thresholds, const vector<Rect> charRegions)
   {
@@ -804,7 +785,7 @@ namespace alpr
     return newCharRegions;
   }
 
-  void CharacterSegmenter::filterEdgeBoxes(vector<Mat> thresholds, const vector<Rect> charRegions, float avgCharWidth, float avgCharHeight)
+  Mat CharacterSegmenter::filterEdgeBoxes(vector<Mat> thresholds, const vector<Rect> charRegions, float avgCharWidth, float avgCharHeight)
   {
     const float MIN_ANGLE_FOR_ROTATION = 0.4;
     int MIN_CONNECTED_EDGE_PIXELS = (avgCharHeight * 1.5);
@@ -815,6 +796,9 @@ namespace alpr
     if (alternate < MIN_CONNECTED_EDGE_PIXELS && alternate > avgCharHeight)
       MIN_CONNECTED_EDGE_PIXELS = alternate;
 
+    Mat empty_mask = Mat::zeros(thresholds[0].size(), CV_8U);
+    bitwise_not(empty_mask, empty_mask);
+    
     //
     // Pay special attention to the edge boxes.  If it's a skinny box, and the vertical height extends above our bounds... remove it.
     //while (charBoxes.size() > 0 && charBoxes[charBoxes.size() - 1].width < MIN_SEGMENT_WIDTH_EDGES)
@@ -827,7 +811,7 @@ namespace alpr
     // Check for long vertical lines.  Once the line is too long, mask the whole region
 
     if (charRegions.size() <= 1)
-      return;
+      return empty_mask;
 
     // Check both sides to see where the edges are
     // The first starts at the right edge of the leftmost char region and works its way left
@@ -842,7 +826,7 @@ namespace alpr
     {
       Mat rotated;
 
-      if (top.angle > MIN_ANGLE_FOR_ROTATION)
+      if (abs(top.angle) > MIN_ANGLE_FOR_ROTATION)
       {
         // Rotate image:
         rotated = Mat(thresholds[i].size(), thresholds[i].type());
@@ -911,9 +895,12 @@ namespace alpr
     if (leftEdge != 0 || rightEdge != thresholds[0].cols)
     {
       Mat mask = Mat::zeros(thresholds[0].size(), CV_8U);
-      rectangle(mask, Point(leftEdge, 0), Point(rightEdge, thresholds[0].rows), Scalar(255,255,255), -1);
+      bitwise_not(mask, mask);
+      
+      rectangle(mask, Point(0, charRegions[0].y), Point(leftEdge, charRegions[0].y+charRegions[0].height), Scalar(0,0,0), -1);
+      rectangle(mask, Point(rightEdge, charRegions[0].y), Point(mask.cols, charRegions[0].y+charRegions[0].height), Scalar(0,0,0), -1);
 
-      if (top.angle > MIN_ANGLE_FOR_ROTATION)
+      if (abs(top.angle) > MIN_ANGLE_FOR_ROTATION)
       {
         // Rotate mask:
         Mat rot_mat( 2, 3, CV_32FC1 );
@@ -944,10 +931,7 @@ namespace alpr
           cout << "Edge Filter: Entire right region is erased" << endl;
       }
 
-      for (unsigned int i = 0; i < thresholds.size(); i++)
-      {
-        bitwise_and(thresholds[i], mask, thresholds[i]);
-      }
+
 
       if (this->config->debugCharSegmenter)
       {
@@ -960,8 +944,11 @@ namespace alpr
         for (unsigned int z = 0; z < imgDbgCleanStages.size(); z++)
           fillMask(imgDbgCleanStages[z], invertedMask, Scalar(0,0,255));
       }
+      
+      return mask;
     }
 
+    return empty_mask;
   }
 
   int CharacterSegmenter::getLongestBlobLengthBetweenLines(Mat img, int col)
@@ -1079,6 +1066,20 @@ namespace alpr
       rectangle(mask, charBoxes[i], Scalar(255, 255, 255), -1);
 
     return mask;
+  }
+  std::vector<cv::Rect> CharacterSegmenter::convert1DHitsToRect(vector<pair<int, int> > hits, LineSegment top, LineSegment bottom) {
+
+    vector<Rect> boxes;
+    
+    for (unsigned int i = 0; i < hits.size(); i++)
+    {
+      Point topLeft = Point(hits[i].first, top.getPointAt(hits[i].first) - 1);
+      Point botRight = Point(hits[i].second, bottom.getPointAt(hits[i].second) + 1);
+      
+      boxes.push_back(Rect(topLeft, botRight));
+    }
+    
+    return boxes;
   }
 
 }

@@ -1,10 +1,10 @@
 /*
- * Copyright (c) 2014 New Designs Unlimited, LLC
- * Opensource Automated License Plate Recognition [http://www.openalpr.com]
+ * Copyright (c) 2015 OpenALPR Technology, Inc.
+ * Open source Automated License Plate Recognition [http://www.openalpr.com]
  *
- * This file is part of OpenAlpr.
+ * This file is part of OpenALPR.
  *
- * OpenAlpr is free software: you can redistribute it and/or modify
+ * OpenALPR is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License
  * version 3 as published by the Free Software Foundation
  *
@@ -18,6 +18,8 @@
 */
 
 #include <opencv2/core/core.hpp>
+#include <functional>
+#include <cctype>
 
 #include "utility.h"
 
@@ -46,7 +48,11 @@ namespace alpr
       expandedRegion.width = maxX - expandedRegion.x;
     if (expandedRegion.y + expandedRegion.height > maxY)
       expandedRegion.height = maxY - expandedRegion.y;
-
+    if (expandedRegion.width < 0)
+      expandedRegion.width = 0;
+    if (expandedRegion.height < 0)
+      expandedRegion.height = 0;
+    
     return expandedRegion;
   }
 
@@ -94,6 +100,10 @@ namespace alpr
     return newImage;
   }
 
+  void drawAndWait(cv::Mat frame)
+  {
+    drawAndWait(&frame);
+  }
   void drawAndWait(cv::Mat* frame)
   {
     cv::imshow("Temp Window", *frame);
@@ -121,7 +131,7 @@ namespace alpr
     //Mat img_equalized = equalizeBrightness(img_gray);
 
     timespec startTime;
-    getTime(&startTime);
+    getTimeMonotonic(&startTime);
 
     vector<Mat> thresholds;
 
@@ -160,7 +170,7 @@ namespace alpr
     if (config->debugTiming)
     {
       timespec endTime;
-      getTime(&endTime);
+      getTimeMonotonic(&endTime);
       cout << "  -- Produce Threshold Time: " << diffclock(startTime, endTime) << "ms." << endl;
     }
 
@@ -264,6 +274,133 @@ namespace alpr
     }
   }
 
+
+// Compares two strings and computes the edit distance between them
+// http://en.wikipedia.org/wiki/Levenshtein_distance
+// max is the cutoff (i.e., max distance) where we stop trying to find distance
+int levenshteinDistance (const std::string &s1, const std::string &s2, int max)
+{
+    const char* word1 = s1.c_str();
+    int len1 = s1.length();
+    const char* word2 = s2.c_str();
+    int len2 = s2.length();
+    max--;
+  
+    //int matrix[2][len2 + 1];
+    std::vector<std::vector<int> > matrix;
+    for (unsigned int i = 0; i < 2; i++)
+    {
+      std::vector<int> top_elem;
+      matrix.push_back(top_elem);
+      for (unsigned int j = 0; j < len2 + 1; j++)
+        matrix[i].push_back(0);
+    }
+    int i;
+    int j;
+    
+    /*
+      Initialize the 0 row of "matrix".
+
+        0  
+        1  
+        2  
+        3  
+
+     */
+
+    for (j = 0; j <= len2; j++) {
+        matrix[0][j] = j;
+    }
+
+    /* Loop over column. */
+    for (i = 1; i <= len1; i++) {
+        char c1;
+        /* The first value to consider of the ith column. */
+        int min_j;
+        /* The last value to consider of the ith column. */
+        int max_j;
+        /* The smallest value of the matrix in the ith column. */
+        int col_min;
+        /* The next column of the matrix to fill in. */
+        int next;
+        /* The previously-filled-in column of the matrix. */
+        int prev;
+
+        c1 = word1[i-1];
+        min_j = 1;
+        if (i > max) {
+            min_j = i - max;
+        }
+        max_j = len2;
+        if (len2 > max + i) {
+            max_j = max + i;
+        }
+        col_min = INT_MAX;
+        next = i % 2;
+        if (next == 1) {
+            prev = 0;
+        }
+        else {
+            prev = 1;
+        }
+        matrix[next][0] = i;
+        /* Loop over rows. */
+        for (j = 1; j <= len2; j++) {
+            if (j < min_j || j > max_j) {
+                /* Put a large value in there. */
+                matrix[next][j] = max + 1;
+            }
+            else {
+                char c2;
+
+                c2 = word2[j-1];
+                if (c1 == c2) {
+                    /* The character at position i in word1 is the same as
+                       the character at position j in word2. */
+                    matrix[next][j] = matrix[prev][j-1];
+                }
+                else {
+                    /* The character at position i in word1 is not the
+                       same as the character at position j in word2, so
+                       work out what the minimum cost for getting to cell
+                       i, j is. */
+                    int del;
+                    int insert;
+                    int substitute;
+                    int minimum;
+
+                    del = matrix[prev][j] + 1;
+                    insert = matrix[next][j-1] + 1;
+                    substitute = matrix[prev][j-1] + 1;
+                    minimum = del;
+                    if (insert < minimum) {
+                        minimum = insert;
+                    }
+                    if (substitute < minimum) {
+                        minimum = substitute;
+                    }
+                    matrix[next][j] = minimum;
+                }
+            }
+            /* Find the minimum value in the ith column. */
+            if (matrix[next][j] < col_min) {
+                col_min = matrix[next][j];
+            }
+        }
+        if (col_min > max) {
+            /* All the elements of the ith column are greater than the
+               maximum, so no match less than or equal to max can be
+               found by looking at succeeding columns. */
+            return max + 1;
+        }
+    }
+    int returnval = matrix[len1 % 2][len2];
+    if (returnval > max + 1)
+      returnval = max + 1;
+    return returnval;
+}
+  
+  
   LineSegment::LineSegment()
   {
     init(0, 0, 0, 0);
@@ -304,6 +441,12 @@ namespace alpr
     return slope * (x - p2.x) + p2.y;
   }
 
+  float LineSegment::getXPointAt(float y)
+  {
+    float y_intercept = getPointAt(0);
+    return (y - y_intercept) / slope;
+  }
+  
   Point LineSegment::closestPointOnSegmentTo(Point p)
   {
     float top = (p.x - p1.x) * (p2.x - p1.x) + (p.y - p1.y)*(p2.y - p1.y);
@@ -421,6 +564,12 @@ namespace alpr
     ss << value;
     return ss.str();
   }
+  std::string toString(long value)
+  {
+    stringstream ss;
+    ss << value;
+    return ss.str();
+  }
   std::string toString(unsigned int value)
   {
     return toString((int) value);
@@ -437,5 +586,22 @@ namespace alpr
     ss << value;
     return ss.str();
   }
-  
+
+// trim from start
+  std::string &ltrim(std::string &s) {
+    s.erase(s.begin(), std::find_if(s.begin(), s.end(), std::not1(std::ptr_fun<int, int>(std::isspace))));
+    return s;
+  }
+
+// trim from end
+  std::string &rtrim(std::string &s) {
+    s.erase(std::find_if(s.rbegin(), s.rend(), std::not1(std::ptr_fun<int, int>(std::isspace))).base(), s.end());
+    return s;
+  }
+
+// trim from both ends
+  std::string &trim(std::string &s) {
+    return ltrim(rtrim(s));
+  }
+
 }

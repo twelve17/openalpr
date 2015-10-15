@@ -1,10 +1,10 @@
 /*
- * Copyright (c) 2014 New Designs Unlimited, LLC
- * Opensource Automated License Plate Recognition [http://www.openalpr.com]
+ * Copyright (c) 2015 OpenALPR Technology, Inc.
+ * Open source Automated License Plate Recognition [http://www.openalpr.com]
  *
- * This file is part of OpenAlpr.
+ * This file is part of OpenALPR.
  *
- * OpenAlpr is free software: you can redistribute it and/or modify
+ * OpenALPR is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License
  * version 3 as published by the Free Software Foundation
  *
@@ -29,8 +29,8 @@ namespace alpr
 
   class TextLine {
   public:
-    TextLine(std::vector<cv::Point> textArea, std::vector<cv::Point> linePolygon);
-    TextLine(std::vector<cv::Point2f> textArea, std::vector<cv::Point2f> linePolygon);
+    TextLine(std::vector<cv::Point> textArea, std::vector<cv::Point> linePolygon, cv::Size imgSize);
+    TextLine(std::vector<cv::Point2f> textArea, std::vector<cv::Point2f> linePolygon, cv::Size imgSize);
     virtual ~TextLine();
 
 
@@ -50,7 +50,7 @@ namespace alpr
     cv::Mat drawDebugImage(cv::Mat baseImage);
   private:
 
-    void initialize(std::vector<cv::Point> textArea, std::vector<cv::Point> linePolygon);
+    void initialize(std::vector<cv::Point> textArea, std::vector<cv::Point> linePolygon, cv::Size imgSize);
   };
 
 }

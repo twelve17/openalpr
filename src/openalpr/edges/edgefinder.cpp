@@ -1,10 +1,10 @@
 /*
- * Copyright (c) 2014 New Designs Unlimited, LLC
- * Opensource Automated License Plate Recognition [http://www.openalpr.com]
+ * Copyright (c) 2015 OpenALPR Technology, Inc.
+ * Open source Automated License Plate Recognition [http://www.openalpr.com]
  *
- * This file is part of OpenAlpr.
+ * This file is part of OpenALPR.
  *
- * OpenAlpr is free software: you can redistribute it and/or modify
+ * OpenALPR is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License
  * version 3 as published by the Free Software Foundation
  *
@@ -31,7 +31,6 @@ namespace alpr
     this->pipeline_data = pipeline_data;
 
     // First re-crop the area from the original picture knowing the text position
-    this->confidence = 0;
 
   }
 
@@ -49,10 +48,11 @@ namespace alpr
     // If it's a nice, long segment, then guess the correct box based on character height/position
     if (tlc.longerSegment.length > tlc.charHeight * 3)
     {
-      float charHeightToPlateWidthRatio = pipeline_data->config->plateWidthMM / pipeline_data->config->charHeightMM;
+
+      float charHeightToPlateWidthRatio = pipeline_data->config->plateWidthMM / pipeline_data->config->avgCharHeightMM;
       float idealPixelWidth = tlc.charHeight *  (charHeightToPlateWidthRatio * 1.03);	// Add 3% so we don't clip any characters
 
-      float charHeightToPlateHeightRatio = pipeline_data->config->plateHeightMM / pipeline_data->config->charHeightMM;
+      float charHeightToPlateHeightRatio = pipeline_data->config->plateHeightMM / pipeline_data->config->avgCharHeightMM;
       float idealPixelHeight = tlc.charHeight *  charHeightToPlateHeightRatio;
 
 
@@ -77,7 +77,6 @@ namespace alpr
     else
     {
 
-      //cout << "HEYOOO!" << endl;
       int expandX = (int) ((float) pipeline_data->crop_gray.cols) * 0.15f;
       int expandY = (int) ((float) pipeline_data->crop_gray.rows) * 0.15f;
       int w = pipeline_data->crop_gray.cols;
@@ -117,7 +116,7 @@ namespace alpr
       textAreaRemapped = imgTransform.remapSmallPointstoCrop(textArea, transmtx);
       linePolygonRemapped = imgTransform.remapSmallPointstoCrop(linePolygon, transmtx);
 
-      newLines.push_back(TextLine(textAreaRemapped, linePolygonRemapped));
+      newLines.push_back(TextLine(textAreaRemapped, linePolygonRemapped, newCrop.size()));
     }
 
     // Find the PlateLines for this crop
@@ -128,7 +127,6 @@ namespace alpr
     PlateCorners cornerFinder(newCrop, &plateLines, pipeline_data, newLines);
     vector<Point> smallPlateCorners = cornerFinder.findPlateCorners();
 
-    confidence = cornerFinder.confidence;
 
     // Transform the best corner points back to the original image
     std::vector<Point2f> imgArea;

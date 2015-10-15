@@ -1,10 +1,10 @@
 /*
- * Copyright (c) 2014 New Designs Unlimited, LLC
- * Opensource Automated License Plate Recognition [http://www.openalpr.com]
+ * Copyright (c) 2015 OpenALPR Technology, Inc.
+ * Open source Automated License Plate Recognition [http://www.openalpr.com]
  * 
- * This file is part of OpenAlpr.
+ * This file is part of OpenALPR.
  * 
- * OpenAlpr is free software: you can redistribute it and/or modify
+ * OpenALPR is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License 
  * version 3 as published by the Free Software Foundation 
  * 
@@ -18,12 +18,23 @@
 */
 
 #include "config.h"
+#include "support/filesystem.h"
+#include "support/platform.h"
+#include "simpleini/simpleini.h"
+#include "utility.h"
 
 using namespace std;
 
 namespace alpr
 {
 
+  
+  int getInt(CSimpleIniA* ini, std::string section, std::string key, int defaultValue);
+  float getFloat(CSimpleIniA* ini, std::string section, std::string key, float defaultValue);
+  std::string getString(CSimpleIniA* ini, std::string section, std::string key, std::string defaultValue);
+  bool getBoolean(CSimpleIniA* ini, std::string section, std::string key, bool defaultValue);
+  std::vector<float> getAllFloats(CSimpleIniA* ini, string section, string key);
+  
   Config::Config(const std::string country, const std::string config_file, const std::string runtime_dir)
   {
 
@@ -31,7 +42,6 @@ namespace alpr
 
     this->loaded = false;
 
-    ini = new CSimpleIniA();
 
     string configFile;
 
@@ -78,12 +88,8 @@ namespace alpr
       return;
     }
 
-    ini->LoadFile(configFile.c_str());
 
-    this->country = country;
-
-
-    loadValues(country);
+    loadCommonValues(configFile);
 
     if (runtime_dir.compare("") != 0)
     {
@@ -106,11 +112,23 @@ namespace alpr
       std::cerr << "--(!)                   to point to the correct location of your runtime_dir" << endl;
       return;
     }
-    else if (fileExists((this->runtimeBaseDir + "/ocr/tessdata/" + this->ocrLanguage + ".traineddata").c_str()) == false)
+
+    this->loaded_countries = this->parse_country_string(country);
+
+    if (this->loaded_countries.size() == 0)
     {
-      std::cerr << "--(!) Runtime directory '" << this->runtimeBaseDir << "' is invalid.  Missing OCR data for the country: '" << country<< "'!" << endl;
+      std::cerr << "--(!) Country not specified." << endl;
       return;
     }
+    for (unsigned int i = 0; i < loaded_countries.size(); i++)
+    {
+      bool country_loaded = setCountry(this->loaded_countries[i]);
+      if (!country_loaded)
+      {
+        return;
+      }
+    }
+    setCountry(this->loaded_countries[0]);
 
 
     if (this->debugGeneral)
@@ -122,98 +140,174 @@ namespace alpr
   }
   Config::~Config()
   {
-    delete ini;
+    
   }
 
-  void Config::loadValues(string country)
+  void Config::loadCommonValues(string configFile)
   {
 
-    runtimeBaseDir = getString("common", "runtime_dir", "/usr/share/openalpr/runtime_data");
+    CSimpleIniA iniObj;
+    iniObj.LoadFile(configFile.c_str());
+    CSimpleIniA* ini = &iniObj;
+    
+    runtimeBaseDir = getString(ini, "", "runtime_dir", "/usr/share/openalpr/runtime_data");
 
-    detection_iteration_increase = getFloat("common", "detection_iteration_increase", 1.1);
-    detectionStrictness = getInt("common", "detection_strictness", 3);
-    maxPlateWidthPercent = getFloat("common", "max_plate_width_percent", 100);
-    maxPlateHeightPercent = getFloat("common", "max_plate_height_percent", 100);
-    maxDetectionInputWidth = getInt("common", "max_detection_input_width", 1280);
-    maxDetectionInputHeight = getInt("common", "max_detection_input_height", 768);
+    std::string detectorString = getString(ini, "", "detector", "lbpcpu");
+    std::transform(detectorString.begin(), detectorString.end(), detectorString.begin(), ::tolower);
 
-    maxPlateAngleDegrees = getInt("common", "max_plate_angle_degrees", 15);
+    if (detectorString.compare("lbpcpu") == 0)
+      detector = DETECTOR_LBP_CPU;
+    else if (detectorString.compare("lbpgpu") == 0)
+      detector = DETECTOR_LBP_GPU;
+    else if (detectorString.compare("lbpopencl") == 0)
+      detector = DETECTOR_LBP_OPENCL;
+    else if (detectorString.compare("morphcpu") == 0)
+      detector = DETECTOR_MORPH_CPU;
+    else
+    {
+      std::cerr << "Invalid detector specified: " << detectorString << ".  Using default" << std::endl;
+      detector = DETECTOR_LBP_CPU;
+    }
+    
+    detection_iteration_increase = getFloat(ini, "", "detection_iteration_increase", 1.1);
+    detectionStrictness = getInt(ini, "", "detection_strictness", 3);
+    maxPlateWidthPercent = getFloat(ini, "", "max_plate_width_percent", 100);
+    maxPlateHeightPercent = getFloat(ini, "", "max_plate_height_percent", 100);
+    maxDetectionInputWidth = getInt(ini, "", "max_detection_input_width", 1280);
+    maxDetectionInputHeight = getInt(ini, "", "max_detection_input_height", 768);
 
-    minPlateSizeWidthPx = getInt(country, "min_plate_size_width_px", 100);
-    minPlateSizeHeightPx = getInt(country, "min_plate_size_height_px", 100);
+    mustMatchPattern = getBoolean(ini, "", "must_match_pattern", false);
+    
+    skipDetection = getBoolean(ini, "", "skip_detection", false);
+    
+    prewarp = getString(ini, "", "prewarp", "");
+            
+    maxPlateAngleDegrees = getInt(ini, "", "max_plate_angle_degrees", 15);
 
-    multiline = 	getBoolean(country, "multiline",		false);
 
-    plateWidthMM = getFloat(country, "plate_width_mm", 100);
-    plateHeightMM = getFloat(country, "plate_height_mm", 100);
+    ocrImagePercent = getFloat(ini, "", "ocr_img_size_percent", 100);
+    stateIdImagePercent = getFloat(ini, "", "state_id_img_size_percent", 100);
 
-    charHeightMM = getFloat(country, "char_height_mm", 100);
-    charWidthMM = getFloat(country, "char_width_mm", 100);
-    charWhitespaceTopMM = getFloat(country, "char_whitespace_top_mm", 100);
-    charWhitespaceBotMM = getFloat(country, "char_whitespace_bot_mm", 100);
+    ocrMinFontSize = getInt(ini, "", "ocr_min_font_point", 100);
 
-    templateWidthPx = getInt(country, "template_max_width_px", 100);
-    templateHeightPx = getInt(country, "template_max_height_px", 100);
+    postProcessMinConfidence = getFloat(ini, "", "postprocess_min_confidence", 100);
+    postProcessConfidenceSkipLevel = getFloat(ini, "", "postprocess_confidence_skip_level", 100);
 
-    float ocrImagePercent = getFloat("common", "ocr_img_size_percent", 100);
+    debugGeneral = 	getBoolean(ini, "", "debug_general",		false);
+    debugTiming = 	getBoolean(ini, "", "debug_timing",		false);
+    debugPrewarp = 	getBoolean(ini, "", "debug_prewarp",		false);
+    debugDetector = 	getBoolean(ini, "", "debug_detector",		false);
+    debugStateId = 	getBoolean(ini, "", "debug_state_id",		false);
+    debugPlateLines = 	getBoolean(ini, "", "debug_plate_lines", 	false);
+    debugPlateCorners = 	getBoolean(ini, "", "debug_plate_corners", 	false);
+    debugCharSegmenter = 	getBoolean(ini, "", "debug_char_segment", 	false);
+    debugCharAnalysis =	getBoolean(ini, "", "debug_char_analysis",	false);
+    debugColorFiler = 	getBoolean(ini, "", "debug_color_filter", 	false);
+    debugOcr = 		getBoolean(ini, "", "debug_ocr", 		false);
+    debugPostProcess = 	getBoolean(ini, "", "debug_postprocess", 	false);
+    debugShowImages = 	getBoolean(ini, "", "debug_show_images",	false);
+    debugPauseOnFrame = 	getBoolean(ini, "", "debug_pause_on_frame",	false);
+
+  }
+  
+  
+  void Config::loadCountryValues(string configFile, string country)
+  {
+    CSimpleIniA iniObj;
+    iniObj.SetMultiKey(true);
+    iniObj.LoadFile(configFile.c_str());
+    CSimpleIniA* ini = &iniObj;
+    
+    minPlateSizeWidthPx = getInt(ini, "", "min_plate_size_width_px", 100);
+    minPlateSizeHeightPx = getInt(ini, "", "min_plate_size_height_px", 100);
+
+    multiline = 	getBoolean(ini, "", "multiline",		false);
+
+    string invert_val = getString(ini, "", "invert", "auto");
+
+    if (invert_val == "always")
+    {
+      auto_invert = false;
+      always_invert = true;
+    }
+    else if (invert_val == "never")
+    {
+      auto_invert = false;
+      always_invert = false;
+    }
+    else
+    {
+      auto_invert = true;
+      always_invert = false;
+    }
+
+    plateWidthMM = getFloat(ini, "", "plate_width_mm", 100);
+    plateHeightMM = getFloat(ini, "", "plate_height_mm", 100);
+
+    charHeightMM = getAllFloats(ini, "", "char_height_mm");
+    charWidthMM = getAllFloats(ini, "", "char_width_mm");
+    
+    // Compute the average char height/widths 
+    avgCharHeightMM = 0;
+    avgCharWidthMM = 0;
+    for (unsigned int i = 0; i < charHeightMM.size(); i++)
+    {
+      avgCharHeightMM += charHeightMM[i];
+      avgCharWidthMM += charWidthMM[i];
+    }
+    avgCharHeightMM /= charHeightMM.size();
+    avgCharWidthMM /= charHeightMM.size();
+    
+    charWhitespaceTopMM = getFloat(ini, "", "char_whitespace_top_mm", 100);
+    charWhitespaceBotMM = getFloat(ini, "", "char_whitespace_bot_mm", 100);
+    charWhitespaceBetweenLinesMM = getFloat(ini, "", "char_whitespace_between_lines_mm", 5);
+
+    templateWidthPx = getInt(ini, "", "template_max_width_px", 100);
+    templateHeightPx = getInt(ini, "", "template_max_height_px", 100);
+
+    charAnalysisMinPercent = getFloat(ini, "", "char_analysis_min_pct", 0);
+    charAnalysisHeightRange = getFloat(ini, "", "char_analysis_height_range", 0);
+    charAnalysisHeightStepSize = getFloat(ini, "", "char_analysis_height_step_size", 0);
+    charAnalysisNumSteps = getInt(ini, "", "char_analysis_height_num_steps", 0);
+
+    segmentationMinSpeckleHeightPercent = getFloat(ini, "", "segmentation_min_speckle_height_percent", 0);
+    segmentationMinBoxWidthPx = getInt(ini, "", "segmentation_min_box_width_px", 0);
+    segmentationMinCharHeightPercent = getFloat(ini, "", "segmentation_min_charheight_percent", 0);
+    segmentationMaxCharWidthvsAverage = getFloat(ini, "", "segmentation_max_segment_width_percent_vs_average", 0);
+
+    plateLinesSensitivityVertical = getFloat(ini, "", "plateline_sensitivity_vertical", 0);
+    plateLinesSensitivityHorizontal = getFloat(ini, "", "plateline_sensitivity_horizontal", 0);
+
+    detectorFile = getString(ini, "", "detector_file", "");
+    
+    ocrLanguage = getString(ini, "", "ocr_language", "none");
+
+    postProcessRegexLetters = getString(ini, "", "postprocess_regex_letters", "\\pL");
+    postProcessRegexNumbers = getString(ini, "", "postprocess_regex_numbers", "\\pN");
+
     ocrImageWidthPx = round(((float) templateWidthPx) * ocrImagePercent);
     ocrImageHeightPx = round(((float)templateHeightPx) * ocrImagePercent);
+    stateIdImageWidthPx = round(((float)templateWidthPx) * stateIdImagePercent);
+    stateIdimageHeightPx = round(((float)templateHeightPx) * stateIdImagePercent);
 
-
-    float stateIdImagePercent = getFloat("common", "state_id_img_size_percent", 100);
-    stateIdImageWidthPx = round(((float)templateWidthPx) * ocrImagePercent);
-    stateIdimageHeightPx = round(((float)templateHeightPx) * ocrImagePercent);
-
-
-    charAnalysisMinPercent = getFloat(country, "char_analysis_min_pct", 0);
-    charAnalysisHeightRange = getFloat(country, "char_analysis_height_range", 0);
-    charAnalysisHeightStepSize = getFloat(country, "char_analysis_height_step_size", 0);
-    charAnalysisNumSteps = getInt(country, "char_analysis_height_num_steps", 0);
-
-    segmentationMinBoxWidthPx = getInt(country, "segmentation_min_box_width_px", 0);
-    segmentationMinCharHeightPercent = getFloat(country, "segmentation_min_charheight_percent", 0);
-    segmentationMaxCharWidthvsAverage = getFloat(country, "segmentation_max_segment_width_percent_vs_average", 0);
-
-    plateLinesSensitivityVertical = getFloat(country, "plateline_sensitivity_vertical", 0);
-    plateLinesSensitivityHorizontal = getFloat(country, "plateline_sensitivity_horizontal", 0);
-
-    ocrLanguage = getString(country, "ocr_language", "none");
-    ocrMinFontSize = getInt("common", "ocr_min_font_point", 100);
-
-    postProcessMinConfidence = getFloat("common", "postprocess_min_confidence", 100);
-    postProcessConfidenceSkipLevel = getFloat("common", "postprocess_confidence_skip_level", 100);
-    postProcessMaxSubstitutions = getInt("common", "postprocess_max_substitutions", 100);
-    postProcessMinCharacters = getInt("common", "postprocess_min_characters", 100);
-    postProcessMaxCharacters = getInt("common", "postprocess_max_characters", 100);
-
-    debugGeneral = 	getBoolean("debug", "general",		false);
-    debugTiming = 	getBoolean("debug", "timing",		false);
-    debugStateId = 	getBoolean("debug", "state_id",		false);
-    debugPlateLines = 	getBoolean("debug", "plate_lines", 	false);
-    debugPlateCorners = 	getBoolean("debug", "plate_corners", 	false);
-    debugCharSegmenter = 	getBoolean("debug", "char_segment", 	false);
-    debugCharAnalysis =	getBoolean("debug", "char_analysis",	false);
-    debugColorFiler = 	getBoolean("debug", "color_filter", 	false);
-    debugOcr = 		getBoolean("debug", "ocr", 		false);
-    debugPostProcess = 	getBoolean("debug", "postprocess", 	false);
-    debugShowImages = 	getBoolean("debug", "show_images",	false);
-    debugPauseOnFrame = 	getBoolean("debug", "pause_on_frame",	false);
-
+    postProcessMinCharacters = getInt(ini, "", "postprocess_min_characters", 4);
+    postProcessMaxCharacters = getInt(ini, "", "postprocess_max_characters", 8);
   }
 
-  void Config::debugOff()
+  void Config::setDebug(bool value)
   {
-    debugGeneral = 	false;
-    debugTiming = 	false;
-    debugStateId = 	false;
-    debugPlateLines = 	false;
-    debugPlateCorners = 	false;
-    debugCharSegmenter = 	false;
-    debugCharAnalysis =	false;
-    debugColorFiler = 	false;
-    debugOcr = 		false;
-    debugPostProcess = 	false;
-    debugPauseOnFrame = 	false;
+    debugGeneral = value;
+    debugTiming = value;
+    debugStateId = value;
+    debugPlateLines = value;
+    debugPrewarp = value;
+    debugPlateCorners = value;
+    debugCharSegmenter = value;
+    debugCharAnalysis = value;
+    debugColorFiler = value;
+    debugOcr = value;
+    debugPostProcess = value;
+    debugPauseOnFrame = value;
   }
 
 
@@ -235,50 +329,102 @@ namespace alpr
   }
 
 
+  std::vector<std::string> Config::parse_country_string(std::string countries)
+  {
+    std::istringstream ss(countries);
+    std::string token;
 
+    std::vector<std::string>  parsed_countries;
+    while(std::getline(ss, token, ',')) {
+      std::string trimmed_token = trim(token);
+      if (trimmed_token.size() > 0)
+        parsed_countries.push_back(trimmed_token);
+    }
 
-  float Config::getFloat(string section, string key, float defaultValue)
+    return parsed_countries;
+  }
+
+  bool Config::setCountry(std::string country)
+  {
+    this->country = country;
+
+    std::string country_config_file = this->runtimeBaseDir + "/config/" + country + ".conf";
+    if (fileExists(country_config_file.c_str()) == false)
+    {
+      std::cerr << "--(!) Country config file '" << country_config_file << "' does not exist.  Missing config for the country: '" << country<< "'!" << endl;
+      return false;
+    }
+
+    loadCountryValues(country_config_file, country);
+
+    if (fileExists((this->runtimeBaseDir + "/ocr/tessdata/" + this->ocrLanguage + ".traineddata").c_str()) == false)
+    {
+      std::cerr << "--(!) Runtime directory '" << this->runtimeBaseDir << "' is invalid.  Missing OCR data for the country: '" << country<< "'!" << endl;
+      return false;
+    }
+
+    return true;
+  }
+
+  float getFloat(CSimpleIniA* ini, string section, string key, float defaultValue)
   {
     const char * pszValue = ini->GetValue(section.c_str(), key.c_str(), NULL /*default*/);
     if (pszValue == NULL)
     {
-      std::cout << "Error: missing configuration entry for: " << section << "->" << key << endl;
       return defaultValue;
     }
 
     float val = atof(pszValue);
     return val;
   }
-  int Config::getInt(string section, string key, int defaultValue)
+  
+  std::vector<float> getAllFloats(CSimpleIniA* ini, string section, string key)
+  {
+    CSimpleIniA::TNamesDepend values;
+    
+    ini->GetAllValues(section.c_str(), key.c_str(), values);
+ 
+    // sort the values into the original load order
+    values.sort(CSimpleIniA::Entry::LoadOrder());
+
+    std::vector<float> response;
+    
+  // output all of the items
+    CSimpleIniA::TNamesDepend::const_iterator i;
+    for (i = values.begin(); i != values.end(); ++i) { 
+      response.push_back(atof(i->pItem));
+    }
+    
+    return response;
+  }
+  
+  int getInt(CSimpleIniA* ini, string section, string key, int defaultValue)
   {
     const char * pszValue = ini->GetValue(section.c_str(), key.c_str(), NULL /*default*/);
     if (pszValue == NULL)
     {
-      std::cout << "Error: missing configuration entry for: " << section << "->" << key << endl;
       return defaultValue;
     }
 
     int val = atoi(pszValue);
     return val;
   }
-  bool Config::getBoolean(string section, string key, bool defaultValue)
+  bool getBoolean(CSimpleIniA* ini, string section, string key, bool defaultValue)
   {
     const char * pszValue = ini->GetValue(section.c_str(), key.c_str(), NULL /*default*/);
     if (pszValue == NULL)
     {
-      std::cout << "Error: missing configuration entry for: " << section << "->" << key << endl;
       return defaultValue;
     }
 
     int val = atoi(pszValue);
     return val != 0;
   }
-  string Config::getString(string section, string key, string defaultValue)
+  string getString(CSimpleIniA* ini, string section, string key, string defaultValue)
   {
     const char * pszValue = ini->GetValue(section.c_str(), key.c_str(), NULL /*default*/);
     if (pszValue == NULL)
     {
-      std::cout << "Error: missing configuration entry for: " << section << "->" << key << endl;
       return defaultValue;
     }
 

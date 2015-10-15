@@ -1,10 +1,10 @@
 /*
- * Copyright (c) 2014 New Designs Unlimited, LLC
- * Opensource Automated License Plate Recognition [http://www.openalpr.com]
+ * Copyright (c) 2015 OpenALPR Technology, Inc.
+ * Open source Automated License Plate Recognition [http://www.openalpr.com]
  *
- * This file is part of OpenAlpr.
+ * This file is part of OpenALPR.
  *
- * OpenAlpr is free software: you can redistribute it and/or modify
+ * OpenALPR is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License
  * version 3 as published by the Free Software Foundation
  *
@@ -102,14 +102,14 @@ namespace alpr
     }
   }
 
-  Mat TextContours::drawDebugImage() {
+  Mat TextContours::drawDebugImage() const {
 
       Mat img_contours = Mat::zeros(Size(width, height), CV_8U);
 
       return drawDebugImage(img_contours);
   }
 
-  Mat TextContours::drawDebugImage(Mat baseImage) {
+  Mat TextContours::drawDebugImage(Mat baseImage) const {
       Mat img_contours(baseImage.size(), CV_8U);
       baseImage.copyTo(img_contours);
 

@@ -1,10 +1,10 @@
 /*
- * Copyright (c) 2014 New Designs Unlimited, LLC
- * Opensource Automated License Plate Recognition [http://www.openalpr.com]
+ * Copyright (c) 2015 OpenALPR Technology, Inc.
+ * Open source Automated License Plate Recognition [http://www.openalpr.com]
  *
- * This file is part of OpenAlpr.
+ * This file is part of OpenALPR.
  *
- * OpenAlpr is free software: you can redistribute it and/or modify
+ * OpenALPR is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License
  * version 3 as published by the Free Software Foundation
  *
@@ -47,8 +47,8 @@ namespace alpr
     std::vector<bool> getIndicesCopy();
     void setIndices(std::vector<bool> newIndices);
 
-    cv::Mat drawDebugImage();
-    cv::Mat drawDebugImage(cv::Mat baseImage);
+    cv::Mat drawDebugImage() const;
+    cv::Mat drawDebugImage(cv::Mat baseImage) const;
 
   private:
 

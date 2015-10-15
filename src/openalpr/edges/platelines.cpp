@@ -1,10 +1,10 @@
 /*
- * Copyright (c) 2014 New Designs Unlimited, LLC
- * Opensource Automated License Plate Recognition [http://www.openalpr.com]
+ * Copyright (c) 2015 OpenALPR Technology, Inc.
+ * Open source Automated License Plate Recognition [http://www.openalpr.com]
  *
- * This file is part of OpenAlpr.
+ * This file is part of OpenALPR.
  *
- * OpenAlpr is free software: you can redistribute it and/or modify
+ * OpenALPR is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License
  * version 3 as published by the Free Software Foundation
  *
@@ -47,19 +47,19 @@ namespace alpr
       cout << "PlateLines findLines" << endl;
 
     timespec startTime;
-    getTime(&startTime);
+    getTimeMonotonic(&startTime);
 
 
     // Ignore input images that are pure white or pure black
     Scalar avgPixelIntensity = mean(inputImage);
-    if (avgPixelIntensity[0] == 255)
+    if (avgPixelIntensity[0] >= 252)
       return;
-    else if (avgPixelIntensity[0] == 0)
+    else if (avgPixelIntensity[0] <= 3)
       return;
 
     // Do a bilateral filter to clean the noise but keep edges sharp
     Mat smoothed(inputImage.size(), inputImage.type());
-    adaptiveBilateralFilter(inputImage, smoothed, Size(3,3), 45, 45);
+    bilateralFilter(inputImage, smoothed, 3, 45, 45);
 
 
     int morph_elem  = 2;
@@ -129,7 +129,7 @@ namespace alpr
     if (pipelineData->config->debugTiming)
     {
       timespec endTime;
-      getTime(&endTime);
+      getTimeMonotonic(&endTime);
       cout << "Plate Lines Time: " << diffclock(startTime, endTime) << "ms." << endl;
     }
 
@@ -143,8 +143,8 @@ namespace alpr
     if (this->debug)
       cout << "PlateLines::getLines" << endl;
 
-    static int HORIZONTAL_SENSITIVITY = pipelineData->config->plateLinesSensitivityHorizontal;
-    static int VERTICAL_SENSITIVITY = pipelineData->config->plateLinesSensitivityVertical;
+    int HORIZONTAL_SENSITIVITY = pipelineData->config->plateLinesSensitivityHorizontal;
+    int VERTICAL_SENSITIVITY = pipelineData->config->plateLinesSensitivityVertical;
 
     vector<Vec2f> allLines;
     vector<PlateLine> filteredLines;

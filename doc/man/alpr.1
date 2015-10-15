@@ -26,9 +26,9 @@ the library, the accuracy for these other countries can be increased.
 .SH "USAGE"
 .PP 
 
-alpr    [\-c <country_code>] [\-\-config <config_file>] [\-n <topN>] [\-\-seek
-        <integer_ms>] [\-t <region code>] [\-\-clock] [\-d] [\-j] [\-\-]
-        [\-\-version] [\-h] <image_file_path>
+   alpr  [\-c <country_code>] [\-\-config <config_file>] [\-n <topN>] [\-\-seek
+         <integer_ms>] [\-p <pattern code>] [\-\-clock] [\-d] [\-j] [\-\-]
+         [\-\-version] [\-h] <image_file_path>
 
 
 Where: 
@@ -46,8 +46,8 @@ Where:
    \-\-seek <integer_ms>
      Seek to the specied millisecond in a video file. Default=0
 
-   \-t <region code>,  \-\-template_region <region code>
-     Attempt to match the plate number against a region template (e.g., md
+   \-p <pattern code>,  \-\-pattern <pattern code>
+     Attempt to match the plate number against a plate pattern (e.g., md
      for Maryland, ca for California)
 
    \-\-clock
@@ -55,7 +55,8 @@ Where:
      Default=off
 
    \-d,  \-\-detect_region
-     Attempt to detect the region of the plate image.  Default=off
+     Attempt to detect the region of the plate image.  [Experimental] 
+     Default=off
 
    \-j,  \-\-json
      Output recognition results in JSON format.  Default=off
@@ -96,6 +97,13 @@ The config file is not provided on the CLI, so it will read the configuration da
 from /tmp/openalpr.conf
 .PP
 .RS
+\f(CW$ alpr -c us *.jpg
+.RE
+.PP
+This command will attempt to recognize number plates in all jpeg images in the current directory
+image using the USA\-style recognition data.
+.PP
+.RS
 \f(CW$ alpr \-j /source/video.mp4
 .RE
 .PP
@@ -103,13 +111,21 @@ This command reads data from an input video (/source/video.mp4) and outputs
 recognition data as JSON.
 .PP
 .RS
-\f(CW$ alpr \-j < /source/imagefilelist.txt > /out/recognitionresults.txt
+\f(CW$ alpr \-j stdin < /source/imagefilelist.txt > /out/recognitionresults.txt
 .RE
 .PP
 This command processes a list of image files provided in /source/imagefilelist.txt
 and writes JSON results to /out/recognitionresults.txt.
 .PP
+.RS
+\f(CW$ alpr webcam
 .RE
+.PP
+This command processes video from your webcam.  You can also use /dev/video0, /dev/video1, etc. 
+if you have multiple webcams.
+.PP
+.RE
+
 
 .SH "DIAGNOSTICS"
 
@@ -164,7 +180,7 @@ all contributors to the project.
 .SH "AUTHOR"
 
 .PP 
-OpenALPR is written and maintained by Matthew Hill (matt@ndu.com)
+OpenALPR is written and maintained by Matthew Hill (matthill@openalpr.com)
 and contributors from the open source community.
 .PP 
 Mailing lists for support and development are available at

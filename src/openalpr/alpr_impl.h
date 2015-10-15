@@ -1,10 +1,10 @@
 /*
- * Copyright (c) 2014 New Designs Unlimited, LLC
- * Opensource Automated License Plate Recognition [http://www.openalpr.com]
+ * Copyright (c) 2015 OpenALPR Technology, Inc.
+ * Open source Automated License Plate Recognition [http://www.openalpr.com]
  * 
- * This file is part of OpenAlpr.
+ * This file is part of OpenALPR.
  * 
- * OpenAlpr is free software: you can redistribute it and/or modify
+ * OpenALPR is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License 
  * version 3 as published by the Free Software Foundation 
  * 
@@ -32,8 +32,10 @@
 #include "detection/detector.h"
 #include "detection/detectorfactory.h"
 
+#include "prewarp.h"
+
 #include "licenseplatecandidate.h"
-#include "stateidentifier.h"
+#include "../statedetection/state_detector.h"
 #include "segmentation/charactersegmenter.h"
 #include "ocr.h"
 
@@ -43,9 +45,12 @@
 
 #include "pipeline_data.h"
 
+#include "prewarp.h"
+
 #include <opencv2/core/core.hpp>
    
 #include "support/platform.h"
+#include "support/utf8.h"
 
 #define DEFAULT_TOPN 25
 #define DEFAULT_DETECT_REGION false
@@ -61,6 +66,13 @@ namespace alpr
     AlprResults results;
   };
 
+  struct AlprRecognizers
+  {
+    Detector* plateDetector;
+    StateDetector* stateDetector;
+    OCR* ocr;
+  };
+
   class AlprImpl
   {
 
@@ -68,14 +80,17 @@ namespace alpr
       AlprImpl(const std::string country, const std::string configFile = "", const std::string runtimeDir = "");
       virtual ~AlprImpl();
 
-      AlprFullDetails recognizeFullDetails(cv::Mat img);
       AlprFullDetails recognizeFullDetails(cv::Mat img, std::vector<cv::Rect> regionsOfInterest);
 
-      AlprResults recognize( std::vector<char> imageBytes, std::vector<AlprRegionOfInterest> regionsOfInterest );
+      AlprResults recognize( std::vector<char> imageBytes );
+	    AlprResults recognize( std::vector<char> imageBytes, std::vector<AlprRegionOfInterest> regionsOfInterest );
       AlprResults recognize( unsigned char* pixelData, int bytesPerPixel, int imgWidth, int imgHeight, std::vector<AlprRegionOfInterest> regionsOfInterest );
+      AlprResults recognize( cv::Mat img );
       AlprResults recognize( cv::Mat img, std::vector<cv::Rect> regionsOfInterest );
 
       void applyRegionTemplate(AlprPlateResult* result, std::string region);
+
+      AlprFullDetails analyzeSingleCountry(cv::Mat colorImg, cv::Mat grayImg, std::vector<cv::Rect> regionsOfInterest);
 
       void setDetectRegion(bool detectRegion);
       void setTopN(int topn);
@@ -93,14 +108,16 @@ namespace alpr
 
     private:
 
-      Detector* plateDetector;
-      StateIdentifier* stateIdentifier;
-      OCR* ocr;
+      std::map<std::string, AlprRecognizers> recognizers;
+
+      PreWarp* prewarp;
 
       int topN;
       bool detectRegion;
       std::string defaultRegion;
 
+      cv::Mat getCharacterTransformMatrix(PipelineData* pipeline_data );
+      std::vector<AlprCoordinate> getCharacterPoints(cv::Rect char_rect, cv::Mat transmtx);
       std::vector<cv::Rect> convertRects(std::vector<AlprRegionOfInterest> regionsOfInterest);
 
   };

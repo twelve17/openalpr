@@ -1,10 +1,10 @@
 /*
- * Copyright (c) 2014 New Designs Unlimited, LLC
- * Opensource Automated License Plate Recognition [http://www.openalpr.com]
+ * Copyright (c) 2015 OpenALPR Technology, Inc.
+ * Open source Automated License Plate Recognition [http://www.openalpr.com]
  * 
- * This file is part of OpenAlpr.
+ * This file is part of OpenALPR.
  * 
- * OpenAlpr is free software: you can redistribute it and/or modify
+ * OpenALPR is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License 
  * version 3 as published by the Free Software Foundation 
  * 
@@ -107,7 +107,25 @@ void imageCollectionThread(void* arg)
     {
       cv::VideoCapture cap=cv::VideoCapture();
       dispatcher->log_info("Video stream connecting...");
-      cap.open(dispatcher->mjpeg_url);
+
+      // Check if it's a webcam, if so, pass the device ID
+      std::string video_prefix = "/dev/video";
+      if (startsWith(dispatcher->mjpeg_url, video_prefix))
+      {
+        std::string device_number_str = dispatcher->mjpeg_url.substr(video_prefix.length());
+        dispatcher->log_info("Opening webcam video device " + device_number_str);
+        
+        int webcam_number = atoi(device_number_str.c_str());
+        cap.open(webcam_number);
+      }
+      else if (dispatcher->mjpeg_url == "webcam")
+      {
+        cap.open(0);
+      }
+      else
+      {
+        cap.open(dispatcher->mjpeg_url);
+      }
       
       if (cap.isOpened())
       {
