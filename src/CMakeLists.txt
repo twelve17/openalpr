@@ -52,19 +52,37 @@ IF (WIN32 AND WITH_DAEMON)
   SET(WITH_DAEMON OFF)
 ENDIF()
 
-FIND_PACKAGE( Tesseract REQUIRED )
+IF (OPENALPR_DEP_COCOA_PODS_PATH) 
+  SET(Tesseract_INCLUDE_DIRS "${OPENALPR_DEP_COCOA_PODS_PATH}/TesseractOCRiOS/TesseractOCR/include")
+  SET(Tesseract_LIBRARIES "${OPENALPR_DEP_COCOA_PODS_PATH}/TesseractOCRiOS/TesseractOCR/lib/liblept.a;${OPENALPR_DEP_COCOA_PODS_PATH}/TesseractOCRiOS/TesseractOCR/lib/libtesseract_all.a")
+ELSE()
+  FIND_PACKAGE(Tesseract REQUIRED)
+ENDIF()
 
 include_directories(${Tesseract_INCLUDE_DIRS})
 
-# Discover OpenCV directory automatically
-find_path(OpenCV_DIR
-  NAMES OpenCVConfig.cmake
-  HINTS ${CMAKE_SOURCE_DIR}/../libraries/opencv/
-)
-# Opencv Package
-FIND_PACKAGE( OpenCV REQUIRED )
-IF (${OpenCV_VERSION} VERSION_LESS 2.4.7)
-	MESSAGE(FATAL_ERROR "OpenCV version is not compatible : ${OpenCV_VERSION}")
+IF (OPENALPR_DEP_COCOA_PODS_PATH) 
+
+  SET(OpenCV_POD_Dir "${OPENALPR_DEP_COCOA_PODS_PATH}/OpenCV/opencv2.framework")
+  MESSAGE(INFO "OpenCV CocoaPods dir: ${OpenCV_POD_Dir}")
+
+  SET(OpenCV_POD_Include_Dir "${OpenCV_POD_Dir}/openalpr_include")
+  SET(OpenCV_INCLUDE_DIRS ${OpenCV_POD_Include_Dir})
+
+  SET(OpenCV_LIBS "${OPENALPR_DEP_COCOA_PODS_PATH}/OpenCV/opencv2.framework/opencv2")
+
+  SET(OpenCV_CONFIG_PATH "${OpenCV_POD_Dir}/Resources")
+ELSE()
+  # Discover OpenCV directory automatically
+  find_path(OpenCV_DIR
+    NAMES OpenCVConfig.cmake
+    HINTS ${CMAKE_SOURCE_DIR}/../libraries/opencv/
+    )
+  # Opencv Package
+  FIND_PACKAGE( OpenCV REQUIRED )
+  IF (${OpenCV_VERSION} VERSION_LESS 2.4.7)
+    MESSAGE(FATAL_ERROR "OpenCV version is not compatible : ${OpenCV_VERSION}")
+  ENDIF()
 ENDIF()
 
 include_directories(${OpenCV_INCLUDE_DIRS})
@@ -195,3 +213,11 @@ CONFIGURE_FILE(
   @ONLY)
 
 ADD_CUSTOM_TARGET(uninstall COMMAND ${CMAKE_COMMAND} -P "${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake")
+
+IF (OPENALPR_DEP_COCOA_PODS_PATH)
+  # Need to pass these to the custom target as ENV variables, as 
+  # normal variables are not available to that target.
+  #SET(ENV{OPENCV_POD_DIR} ${OpenCV_POD_Dir})
+  #SET(ENV{OPENCV_POD_INCLUDE_DIR} ${OpenCV_POD_Include_Dir})
+  ADD_CUSTOM_TARGET(cocoapod_setup COMMAND OPENCV_POD_DIR=${OpenCV_POD_Dir} OPENCV_POD_INCLUDE_DIR=${OpenCV_POD_Include_Dir} ${CMAKE_COMMAND} -P "${CMAKE_MODULE_PATH}/InstallCocoaPods.cmake")
+ENDIF()
